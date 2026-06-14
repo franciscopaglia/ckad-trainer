@@ -1,0 +1,13 @@
+id: fc-create-token
+title: "create a ServiceAccount token"
+mode: flashcard
+domain: security
+references:
+  - https://kubernetes.io/docs/reference/kubectl/generated/kubectl_create/kubectl_create_token/
+
+prompt: |
+  Print a short-lived API token for the ServiceAccount `builder` in namespace
+  `ci`.
+solution:
+  commands:
+    - "kubectl create token builder -n ci"

@@ -1,0 +1,90 @@
+id: hpa-autoscale
+title: "Autoscale a Deployment with an HPA"
+mode: practice
+domain: pod-design
+weight: 1
+estimated_minutes: 4
+randomize: true
+references:
+  - https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/
+
+params:
+  appName: { pick: [web, api, worker] }
+  hpaName: { pick: [web-hpa, api-hpa, scaler] }
+  min: { range: { min: 1, max: 2 } }
+  max: { range: { min: 4, max: 8 } }
+  cpu: { pick: ["50", "70", "80"] }
+
+# A Deployment with CPU requests already exists (an HPA needs requests to target).
+setup:
+  manifests:
+    - |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: {{.appName}}
+        namespace: {{.ns}}
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: {{.appName}}
+        template:
+          metadata:
+            labels:
+              app: {{.appName}}
+          spec:
+            containers:
+              - name: web
+                image: nginx:1.27
+                resources:
+                  requests:
+                    cpu: 100m
+
+prompt: |
+  In `{{.ns}}`, create a HorizontalPodAutoscaler `{{.hpaName}}` targeting
+  Deployment `{{.appName}}`: scale between `{{.min}}` and `{{.max}}` replicas to
+  keep average CPU utilization at `{{.cpu}}%`.
+
+hints:
+  - "kubectl autoscale deployment {{.appName}} -n {{.ns}} --name {{.hpaName}} --min={{.min}} --max={{.max}} --cpu-percent={{.cpu}}"
+  - "an HPA needs the target's containers to declare CPU requests."
+
+verify:
+  - kind: HorizontalPodAutoscaler
+    name: "{{.hpaName}}"
+    assert:
+      - path: "{.spec.scaleTargetRef.name}"
+        equals: "{{.appName}}"
+      - path: "{.spec.minReplicas}"
+        equals: "{{.min}}"
+      - path: "{.spec.maxReplicas}"
+        equals: "{{.max}}"
+      - path: "{.spec.metrics[0].resource.target.averageUtilization}"
+        equals: "{{.cpu}}"
+
+solution:
+  description: |
+    An HPA adjusts a workload's replica count between min and max to hold a
+    resource target (here CPU utilization). It reads metrics from metrics-server.
+  manifests:
+    - |
+      apiVersion: autoscaling/v2
+      kind: HorizontalPodAutoscaler
+      metadata:
+        name: {{.hpaName}}
+        namespace: {{.ns}}
+      spec:
+        scaleTargetRef:
+          apiVersion: apps/v1
+          kind: Deployment
+          name: {{.appName}}
+        minReplicas: {{.min}}
+        maxReplicas: {{.max}}
+        metrics:
+          - type: Resource
+            resource:
+              name: cpu
+              target:
+                type: Utilization
+                averageUtilization: {{.cpu}}

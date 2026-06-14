@@ -1,0 +1,100 @@
+id: ingress-routing
+title: "Route traffic to a Service with an Ingress"
+mode: practice
+domain: services-networking
+weight: 1
+estimated_minutes: 5
+randomize: true
+references:
+  - https://kubernetes.io/docs/concepts/services-networking/ingress/
+
+params:
+  ingName: { pick: [web-ingress, app-route, site] }
+  host: { pick: ["app.example.com", "shop.local", "api.test"] }
+  path: { pick: ["/", "/app", "/api"] }
+  svcName: { pick: [web-svc, app-svc, backend] }
+
+# A Deployment and its Service already exist as the routing backend.
+setup:
+  manifests:
+    - |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: backend
+        namespace: {{.ns}}
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: backend
+        template:
+          metadata:
+            labels:
+              app: backend
+          spec:
+            containers:
+              - name: web
+                image: nginx:1.27
+                ports:
+                  - containerPort: 80
+    - |
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: {{.svcName}}
+        namespace: {{.ns}}
+      spec:
+        selector:
+          app: backend
+        ports:
+          - port: 80
+            targetPort: 80
+
+prompt: |
+  In `{{.ns}}`, create an Ingress `{{.ingName}}` that routes host `{{.host}}`,
+  path `{{.path}}` (pathType `Prefix`) to Service `{{.svcName}}` on port `80`.
+
+hints:
+  - "spec.rules[].host + http.paths[].path define the route; the backend points at a Service + port."
+  - "pathType is required in networking.k8s.io/v1 (use Prefix)."
+
+verify:
+  - kind: Ingress
+    name: "{{.ingName}}"
+    assert:
+      - path: "{.spec.rules[0].host}"
+        equals: "{{.host}}"
+      - path: "{.spec.rules[0].http.paths[0].path}"
+        equals: "{{.path}}"
+      - path: "{.spec.rules[0].http.paths[0].pathType}"
+        equals: "Prefix"
+      - path: "{.spec.rules[0].http.paths[0].backend.service.name}"
+        equals: "{{.svcName}}"
+      - path: "{.spec.rules[0].http.paths[0].backend.service.port.number}"
+        equals: "80"
+
+solution:
+  description: |
+    An Ingress maps host/path rules to Service backends. An Ingress controller
+    (nginx, traefik, ...) must be running to actually serve traffic, but the
+    routing rules live in this object.
+  manifests:
+    - |
+      apiVersion: networking.k8s.io/v1
+      kind: Ingress
+      metadata:
+        name: {{.ingName}}
+        namespace: {{.ns}}
+      spec:
+        rules:
+          - host: {{.host}}
+            http:
+              paths:
+                - path: {{.path}}
+                  pathType: Prefix
+                  backend:
+                    service:
+                      name: {{.svcName}}
+                      port:
+                        number: 80

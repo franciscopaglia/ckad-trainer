@@ -1,0 +1,13 @@
+id: fc-debug-syntax
+title: "ephemeral debug container"
+mode: flashcard
+domain: observability
+references:
+  - https://kubernetes.io/docs/tasks/debug/debug-application/debug-running-pod/
+
+prompt: |
+  Attach an interactive `busybox` ephemeral debug container to the running Pod
+  `app` in namespace `web` and drop into a shell.
+solution:
+  commands:
+    - "kubectl debug -it app -n web --image=busybox -- sh"

@@ -1,0 +1,114 @@
+id: canary-deploy
+title: "Canary release with two Deployments behind one Service"
+mode: practice
+domain: pod-design
+weight: 1
+estimated_minutes: 7
+randomize: true
+references:
+  - https://kubernetes.io/docs/concepts/workloads/controllers/deployment/
+
+params:
+  appName: { pick: [shop, web, payments] }
+  stableReplicas: { range: { min: 2, max: 4 } }
+
+prompt: |
+  In `{{.ns}}`, set up a canary release for app `{{.appName}}`:
+    - Deployment `{{.appName}}-stable`: image `nginx:1.26`, `{{.stableReplicas}}`
+      replicas, Pod labels `app={{.appName}}` and `track=stable`.
+    - Deployment `{{.appName}}-canary`: image `nginx:1.27`, 1 replica,
+      Pod labels `app={{.appName}}` and `track=canary`.
+    - Service `{{.appName}}`: selects `app={{.appName}}` (so it load-balances
+      across BOTH), port 80.
+
+hints:
+  - "Both Deployments share the app label; the Service selects only that label so traffic splits by replica count."
+  - "Roughly 1/(stable+1) of requests hit the canary."
+
+verify:
+  - kind: Deployment
+    name: "{{.appName}}-stable"
+    assert:
+      - path: "{.spec.replicas}"
+        equals: "{{.stableReplicas}}"
+      - path: "{.spec.template.metadata.labels.track}"
+        equals: "stable"
+  - kind: Deployment
+    name: "{{.appName}}-canary"
+    assert:
+      - path: "{.spec.replicas}"
+        equals: "1"
+      - path: "{.spec.template.metadata.labels.track}"
+        equals: "canary"
+  - kind: Service
+    name: "{{.appName}}"
+    assert:
+      - path: "{.spec.selector.app}"
+        equals: "{{.appName}}"
+  - kind: Endpoints
+    name: "{{.appName}}"
+    assert:
+      - path: "{.subsets[0].addresses[0].ip}"
+        exists: true
+        wait: "90s"
+
+solution:
+  description: |
+    Canary = two Deployments sharing the Service's selector label, with the new
+    version on a small replica count so it receives a fraction of traffic. You
+    dial up the canary's replicas as confidence grows.
+  manifests:
+    - |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: {{.appName}}-stable
+        namespace: {{.ns}}
+      spec:
+        replicas: {{.stableReplicas}}
+        selector:
+          matchLabels:
+            app: {{.appName}}
+            track: stable
+        template:
+          metadata:
+            labels:
+              app: {{.appName}}
+              track: stable
+          spec:
+            containers:
+              - name: web
+                image: nginx:1.26
+    - |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: {{.appName}}-canary
+        namespace: {{.ns}}
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: {{.appName}}
+            track: canary
+        template:
+          metadata:
+            labels:
+              app: {{.appName}}
+              track: canary
+          spec:
+            containers:
+              - name: web
+                image: nginx:1.27
+    - |
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: {{.appName}}
+        namespace: {{.ns}}
+      spec:
+        selector:
+          app: {{.appName}}
+        ports:
+          - port: 80
+            targetPort: 80

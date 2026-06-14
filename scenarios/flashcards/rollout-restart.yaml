@@ -1,0 +1,13 @@
+id: fc-rollout-restart
+title: "restart a Deployment's Pods"
+mode: flashcard
+domain: pod-design
+references:
+  - https://kubernetes.io/docs/reference/kubectl/generated/kubectl_rollout/
+
+prompt: |
+  Trigger a rolling restart of all Pods in Deployment `api` (namespace `prod`)
+  without changing its spec.
+solution:
+  commands:
+    - "kubectl rollout restart deployment/api -n prod"

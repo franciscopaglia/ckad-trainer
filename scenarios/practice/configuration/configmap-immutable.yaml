@@ -1,0 +1,47 @@
+id: configmap-immutable
+title: "Create an immutable ConfigMap"
+mode: practice
+domain: configuration
+weight: 1
+estimated_minutes: 2
+randomize: true
+references:
+  - https://kubernetes.io/docs/concepts/configuration/configmap/#configmap-immutable
+
+params:
+  cmName: { pick: [app-config, release-config, settings] }
+  key: { pick: [VERSION, RELEASE, BUILD] }
+  value: { pick: ["v1.4.0", "2026.06", "stable"] }
+
+prompt: |
+  In `{{.ns}}`, create an **immutable** ConfigMap `{{.cmName}}` with key
+  `{{.key}}={{.value}}`. (Immutable ConfigMaps can't be changed after creation,
+  which protects against accidental edits and improves performance.)
+
+hints:
+  - "Set immutable: true alongside data."
+  - "To change an immutable ConfigMap later you must delete and recreate it."
+
+verify:
+  - kind: ConfigMap
+    name: "{{.cmName}}"
+    assert:
+      - path: "{.immutable}"
+        equals: "true"
+      - path: "{.data.{{.key}}}"
+        equals: "{{.value}}"
+
+solution:
+  description: |
+    Marking a ConfigMap (or Secret) immutable prevents updates and lets the
+    kubelet skip watching it, reducing API load on large clusters.
+  manifests:
+    - |
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: {{.cmName}}
+        namespace: {{.ns}}
+      immutable: true
+      data:
+        {{.key}}: "{{.value}}"

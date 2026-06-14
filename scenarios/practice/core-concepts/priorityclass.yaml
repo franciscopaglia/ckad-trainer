@@ -1,0 +1,71 @@
+id: priorityclass
+title: "Assign a PriorityClass to a Pod"
+mode: practice
+domain: core-concepts
+weight: 1
+estimated_minutes: 4
+randomize: true
+references:
+  - https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/
+
+params:
+  pcName: { pick: [high-priority, critical-apps, batch-low] }
+  value: { pick: ["1000", "100000", "500000"] }
+  podName: { pattern: "prio-{{randInt 100 999}}" }
+
+prompt: |
+  Create a (cluster-scoped) PriorityClass `{{.pcName}}` with value `{{.value}}`
+  and `globalDefault: false`. Then, in `{{.ns}}`, create a Pod `{{.podName}}`
+  (image `busybox:1.36`, command `sleep 3600`) that uses it via
+  `priorityClassName`.
+
+hints:
+  - "PriorityClass is cluster-scoped (no namespace); higher value = higher priority."
+  - "The admission controller copies the class's value into the Pod's spec.priority."
+
+verify:
+  - kind: PriorityClass
+    name: "{{.pcName}}"
+    cluster_scoped: true
+    assert:
+      - path: "{.value}"
+        equals: "{{.value}}"
+  - kind: Pod
+    name: "{{.podName}}"
+    assert:
+      - path: "{.spec.priorityClassName}"
+        equals: "{{.pcName}}"
+      - path: "{.spec.priority}"
+        equals: "{{.value}}"
+
+solution:
+  description: |
+    Pods reference a PriorityClass by name; the scheduler uses the resolved
+    priority for scheduling and preemption decisions.
+  manifests:
+    - |
+      apiVersion: scheduling.k8s.io/v1
+      kind: PriorityClass
+      metadata:
+        name: {{.pcName}}
+      value: {{.value}}
+      globalDefault: false
+      description: "Priority class for {{.pcName}}"
+    - |
+      apiVersion: v1
+      kind: Pod
+      metadata:
+        name: {{.podName}}
+        namespace: {{.ns}}
+      spec:
+        restartPolicy: Never
+        priorityClassName: {{.pcName}}
+        containers:
+          - name: app
+            image: busybox:1.36
+            command: ["sleep", "3600"]
+
+cleanup:
+  cluster_scoped:
+    - kind: PriorityClass
+      name: "{{.pcName}}"

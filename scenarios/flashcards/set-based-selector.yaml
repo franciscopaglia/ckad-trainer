@@ -1,0 +1,13 @@
+id: fc-set-based-selector
+title: "set-based label selector"
+mode: flashcard
+domain: core-concepts
+references:
+  - https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#set-based-requirement
+
+prompt: |
+  List the Pods in the current namespace whose `env` label is either `dev` or
+  `prod`, using a set-based selector.
+solution:
+  commands:
+    - "kubectl get pods -l 'env in (dev,prod)'"

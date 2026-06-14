@@ -1,0 +1,51 @@
+id: debug-ephemeral
+title: "Attach an ephemeral debug container"
+mode: practice
+domain: observability
+weight: 1
+estimated_minutes: 3
+randomize: true
+references:
+  - https://kubernetes.io/docs/tasks/debug/debug-application/debug-running-pod/#ephemeral-container
+
+params:
+  podName: { pattern: "app-{{randInt 100 999}}" }
+
+# A running Pod exists but its image (nginx) has no shell tools for debugging.
+setup:
+  manifests:
+    - |
+      apiVersion: v1
+      kind: Pod
+      metadata:
+        name: {{.podName}}
+        namespace: {{.ns}}
+      spec:
+        containers:
+          - name: web
+            image: nginx:1.27
+  commands:
+    - "kubectl wait --for=condition=Ready pod/{{.podName}} -n {{.ns}} --timeout=60s"
+
+prompt: |
+  In `{{.ns}}`, Pod `{{.podName}}` is running a minimal image with no debug
+  tools. Add an **ephemeral** debug container (image `busybox:1.36`) to it with
+  `kubectl debug`, without restarting the Pod.
+
+hints:
+  - "kubectl debug {{.podName}} -n {{.ns}} --image=busybox:1.36 --attach=false -- sleep 3600"
+  - "Ephemeral containers appear under spec.ephemeralContainers and can't be removed once added."
+
+verify:
+  - kind: Pod
+    name: "{{.podName}}"
+    assert:
+      - path: "{.spec.ephemeralContainers[0].image}"
+        equals: "busybox:1.36"
+
+solution:
+  description: |
+    Ephemeral containers let you attach debugging tools to a running Pod without
+    changing its spec or restarting it — ideal for distroless/minimal images.
+  commands:
+    - "kubectl debug {{.podName}} -n {{.ns}} --image=busybox:1.36 --attach=false -- sleep 3600"

@@ -1,0 +1,113 @@
+id: blue-green-switch
+title: "Blue/green: switch the live Service to the new version"
+mode: practice
+domain: pod-design
+weight: 1
+estimated_minutes: 4
+randomize: true
+references:
+  - https://kubernetes.io/docs/concepts/services-networking/service/
+
+params:
+  appName: { pick: [web, store, app] }
+
+# Blue (v1) and green (v2) Deployments both run; the Service currently points at
+# blue. Green has been tested and is ready to go live.
+setup:
+  manifests:
+    - |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: {{.appName}}-blue
+        namespace: {{.ns}}
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: {{.appName}}
+            version: blue
+        template:
+          metadata:
+            labels:
+              app: {{.appName}}
+              version: blue
+          spec:
+            containers:
+              - name: web
+                image: nginx:1.26
+    - |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: {{.appName}}-green
+        namespace: {{.ns}}
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: {{.appName}}
+            version: green
+        template:
+          metadata:
+            labels:
+              app: {{.appName}}
+              version: green
+          spec:
+            containers:
+              - name: web
+                image: nginx:1.27
+    - |
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: {{.appName}}
+        namespace: {{.ns}}
+      spec:
+        selector:
+          app: {{.appName}}
+          version: blue
+        ports:
+          - port: 80
+            targetPort: 80
+
+prompt: |
+  In `{{.ns}}`, the `{{.appName}}` Service currently routes to the BLUE version.
+  The GREEN version is ready. Cut traffic over to green by switching the Service
+  selector to `version: green` (keep `app={{.appName}}`).
+
+hints:
+  - "Blue/green = flip the Service selector between two identical Deployments."
+  - "kubectl patch service {{.appName}} -n {{.ns}} -p '{\"spec\":{\"selector\":{\"app\":\"{{.appName}}\",\"version\":\"green\"}}}'"
+
+verify:
+  - kind: Service
+    name: "{{.appName}}"
+    assert:
+      - path: "{.spec.selector.version}"
+        equals: "green"
+  - kind: Endpoints
+    name: "{{.appName}}"
+    assert:
+      - path: "{.subsets[0].addresses[0].ip}"
+        exists: true
+        wait: "60s"
+
+solution:
+  description: |
+    With two version-labelled Deployments behind one Service, switching the live
+    version is just editing the Service's selector — an instant, reversible cut.
+  manifests:
+    - |
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: {{.appName}}
+        namespace: {{.ns}}
+      spec:
+        selector:
+          app: {{.appName}}
+          version: green
+        ports:
+          - port: 80
+            targetPort: 80
