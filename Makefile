@@ -1,13 +1,25 @@
 BINARY := ckad-trainer
 PKG := ./cmd/ckad-trainer
 PREFIX ?= /usr/local
+VERSION ?= dev
+LDFLAGS := -s -w -X main.version=$(VERSION)
+PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64
 
-.PHONY: all build install test smoke fmt vet headers check clean
+.PHONY: all build install test smoke fmt vet headers check clean dist
 
 all: check build
 
 build: ## Build the binary (embeds the scenario catalog)
-	go build -o $(BINARY) $(PKG)
+	go build -ldflags "$(LDFLAGS)" -o $(BINARY) $(PKG)
+
+dist: ## Cross-compile release binaries into dist/ (set VERSION=vX.Y.Z)
+	@rm -rf dist && mkdir -p dist
+	@for p in $(PLATFORMS); do \
+		os=$${p%/*}; arch=$${p#*/}; out=dist/$(BINARY)-$$os-$$arch; \
+		[ $$os = windows ] && out=$$out.exe; \
+		echo "  $$out"; \
+		GOOS=$$os GOARCH=$$arch CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o $$out $(PKG) || exit 1; \
+	done
 
 install: build ## Install the binary to $(PREFIX)/bin
 	install -m 0755 $(BINARY) $(PREFIX)/bin/$(BINARY)

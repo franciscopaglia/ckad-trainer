@@ -22,7 +22,10 @@ and start hacking on the code, see the [README](./README.md).
 ## 1. Install and set up
 
 You need a Kubernetes cluster you don't mind scribbling on, `kubectl`, and the
-`ckad-trainer` binary (see the README for building it).
+`ckad-trainer` binary — download it from the
+[latest release](https://github.com/franciscopaglia/ckad-trainer/releases/latest)
+and put it on your `PATH` (see the [README](./README.md#install)), or build from
+source.
 
 ```bash
 cp config.example.yaml config.yaml     # then edit it (see §9)

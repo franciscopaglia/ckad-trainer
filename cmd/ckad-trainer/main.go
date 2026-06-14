@@ -25,10 +25,14 @@ import (
 
 var configPath string
 
+// version is stamped at build time via -ldflags "-X main.version=vX.Y.Z".
+var version = "dev"
+
 func main() {
 	root := &cobra.Command{
 		Use:           "ckad-trainer",
 		Short:         "Local CKAD practice: scenario setup, checking, and cleanup",
+		Version:       version,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}

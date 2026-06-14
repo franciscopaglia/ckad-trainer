@@ -17,6 +17,7 @@ all CKAD domains, in both a practice mode and a timed, scored exam mode.
 ## Table of contents
 
 - [What it is](#what-it-is)
+- [Install](#install)
 - [Quickstart](#quickstart)
 - [Using it](#using-it)
 - [Building and developing](#building-and-developing)
@@ -59,17 +60,46 @@ goes back to clean.
 
 ---
 
+## Install
+
+Download the binary for your platform from the
+[latest release](https://github.com/franciscopaglia/ckad-trainer/releases/latest),
+make it executable, and put it on your `PATH`:
+
+```bash
+# Linux (x86_64)
+curl -fsSL -o ckad-trainer https://github.com/franciscopaglia/ckad-trainer/releases/latest/download/ckad-trainer-linux-amd64
+chmod +x ckad-trainer
+sudo mv ckad-trainer /usr/local/bin/      # somewhere on your PATH
+
+ckad-trainer --version                    # confirm it's installed
+```
+
+Pick the asset that matches your machine:
+
+| Platform | Asset |
+|----------|-------|
+| Linux x86_64 | `ckad-trainer-linux-amd64` |
+| Linux ARM64 | `ckad-trainer-linux-arm64` |
+| macOS Intel | `ckad-trainer-darwin-amd64` |
+| macOS Apple Silicon | `ckad-trainer-darwin-arm64` |
+| Windows x86_64 | `ckad-trainer-windows-amd64.exe` |
+
+macOS users: if Gatekeeper blocks the binary, clear the quarantine flag with
+`xattr -d com.apple.quarantine ckad-trainer`. Or [build from source](#build-and-install).
+
+---
+
 ## Quickstart
 
 ```bash
-make build                            # builds ./ckad-trainer (catalog embedded)
 cp config.example.yaml config.yaml    # then edit: set your kube context
-./ckad-trainer doctor                 # checks kubectl, the safety guard, reachability
+ckad-trainer doctor                   # checks kubectl, the safety guard, reachability
 
-./ckad-trainer start configmap-consume   # set up a task + print it
+ckad-trainer start configmap-consume    # set up a task + print it
 #   ... do the work with kubectl/YAML ...
-./ckad-trainer check  configmap-consume  # PASS/FAIL table
-./ckad-trainer cleanup configmap-consume # tear it down
+ckad-trainer check  configmap-consume   # PASS/FAIL table
+ckad-trainer cleanup configmap-consume  # tear it down
 ```
 
 > **Cluster:** any Kubernetes context works — set `provider: kubeconfig` and
@@ -89,11 +119,11 @@ loop (`start`/`check`/`solution`/`solve`/`cleanup`/`reset`), randomization and
 A taste:
 
 ```bash
-./ckad-trainer list                   # browse the catalog (🎲 = randomized)
-./ckad-trainer random --domain security
-./ckad-trainer status                 # what's active across your shells
-./ckad-trainer drill                  # kubectl command-format flashcards
-./ckad-trainer exam start --count 16 --minutes 120
+ckad-trainer list                     # browse the catalog (🎲 = randomized)
+ckad-trainer random --domain security
+ckad-trainer status                   # what's active across your shells
+ckad-trainer drill                    # kubectl command-format flashcards
+ckad-trainer exam start --count 16 --minutes 120
 ```
 
 ---
