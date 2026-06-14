@@ -1,0 +1,53 @@
+id: pod-command-args
+title: "Override container command, args and restart policy"
+mode: practice
+domain: core-concepts
+weight: 1
+estimated_minutes: 3
+randomize: true
+references:
+  - https://kubernetes.io/docs/tasks/inject-data-application/define-command-argument-container/
+
+params:
+  podName: { pattern: "cmd-{{randInt 100 999}}" }
+  restartPolicy: { pick: [Never, OnFailure] }
+  seconds: { pick: ["3600", "7200"] }
+
+prompt: |
+  In `{{.ns}}`, create a Pod `{{.podName}}` (image `busybox:1.36`) that overrides
+  the image entrypoint: set `command` to `sleep` and `args` to `{{.seconds}}`.
+  Use `restartPolicy: {{.restartPolicy}}`.
+
+hints:
+  - "command overrides the image ENTRYPOINT; args overrides CMD."
+  - "they are separate fields - don't cram everything into command."
+
+verify:
+  - kind: Pod
+    name: "{{.podName}}"
+    assert:
+      - path: "{.spec.containers[0].command[0]}"
+        equals: "sleep"
+      - path: "{.spec.containers[0].args[0]}"
+        equals: "{{.seconds}}"
+      - path: "{.spec.restartPolicy}"
+        equals: "{{.restartPolicy}}"
+
+solution:
+  description: |
+    `command` and `args` map to a container's ENTRYPOINT and CMD. Keeping them
+    separate lets you reuse an image's entrypoint while changing only the args.
+  manifests:
+    - |
+      apiVersion: v1
+      kind: Pod
+      metadata:
+        name: {{.podName}}
+        namespace: {{.ns}}
+      spec:
+        restartPolicy: {{.restartPolicy}}
+        containers:
+          - name: app
+            image: busybox:1.36
+            command: ["sleep"]
+            args: ["{{.seconds}}"]

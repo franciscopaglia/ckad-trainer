@@ -1,0 +1,59 @@
+id: job-fields
+title: "Create a Job with completions, parallelism and backoffLimit"
+mode: practice
+domain: pod-design
+weight: 1
+estimated_minutes: 4
+randomize: true
+references:
+  - https://kubernetes.io/docs/concepts/workloads/controllers/job/
+
+params:
+  jobName: { pick: [batch, importer, worker] }
+  completions: { range: { min: 2, max: 4 } }
+  parallelism: { range: { min: 1, max: 2 } }
+  backoffLimit: { range: { min: 2, max: 6 } }
+
+prompt: |
+  In `{{.ns}}`, create a Job `{{.jobName}}` (image `busybox:1.36`, command
+  `sh -c 'exit 0'`) that requires `{{.completions}}` successful completions,
+  runs up to `{{.parallelism}}` Pods in parallel, and gives up after
+  `{{.backoffLimit}}` failures.
+
+hints:
+  - "completions = how many must succeed; parallelism = how many run at once."
+  - "backoffLimit caps the number of retries before the Job is marked Failed."
+
+verify:
+  - kind: Job
+    name: "{{.jobName}}"
+    assert:
+      - path: "{.spec.completions}"
+        equals: "{{.completions}}"
+      - path: "{.spec.parallelism}"
+        equals: "{{.parallelism}}"
+      - path: "{.spec.backoffLimit}"
+        equals: "{{.backoffLimit}}"
+
+solution:
+  description: |
+    completions/parallelism/backoffLimit control batch behaviour. The Pod
+    template must set restartPolicy Never or OnFailure for a Job.
+  manifests:
+    - |
+      apiVersion: batch/v1
+      kind: Job
+      metadata:
+        name: {{.jobName}}
+        namespace: {{.ns}}
+      spec:
+        completions: {{.completions}}
+        parallelism: {{.parallelism}}
+        backoffLimit: {{.backoffLimit}}
+        template:
+          spec:
+            restartPolicy: Never
+            containers:
+              - name: work
+                image: busybox:1.36
+                command: ["sh", "-c", "exit 0"]

@@ -1,0 +1,114 @@
+id: pv-pvc-pod-static
+title: "Static PV -> PVC -> Pod"
+mode: practice
+domain: state-persistence
+weight: 1
+estimated_minutes: 6
+randomize: false
+references:
+  - https://kubernetes.io/docs/concepts/storage/persistent-volumes/
+
+setup:
+  manifests: []
+  commands: []
+
+prompt: |
+  In namespace `{{.ns}}`:
+  1. Create a PersistentVolume `data-pv`: 1Gi, accessMode ReadWriteOnce,
+     hostPath `/mnt/data`, `storageClassName: ""`.
+  2. Create a PersistentVolumeClaim `data-pvc` (same ns) that binds to it
+     (1Gi, ReadWriteOnce, `storageClassName: ""`).
+  3. Create a Pod `app` (image `nginx:1.27`) that mounts `data-pvc` at `/data`.
+
+  Note: this cluster has a default StorageClass, so set `storageClassName: ""`
+  on BOTH the PV and PVC to force static binding instead of dynamic provisioning.
+
+hints:
+  - "PV is cluster-scoped - it has no namespace."
+  - "kubectl explain pv.spec.capacity"
+  - "Empty storageClassName ('') opts out of the default StorageClass so the PVC
+     binds to your static PV."
+
+verify:
+  - kind: PersistentVolume
+    name: data-pv
+    cluster_scoped: true
+    assert:
+      - path: "{.spec.capacity.storage}"
+        equals: "1Gi"
+      - path: "{.spec.accessModes[*]}"
+        contains: "ReadWriteOnce"
+      - path: "{.spec.hostPath.path}"
+        equals: "/mnt/data"
+  - kind: PersistentVolumeClaim
+    name: data-pvc
+    assert:
+      - path: "{.status.phase}"
+        equals: "Bound"
+        wait: "30s"
+      - path: "{.spec.volumeName}"
+        equals: "data-pv"
+        wait: "30s"
+  - kind: Pod
+    name: app
+    assert:
+      - path: '{.spec.volumes[?(@.persistentVolumeClaim.claimName=="data-pvc")].name}'
+        exists: true
+      - path: "{.status.phase}"
+        in: ["Running", "Succeeded"]
+        wait: "60s"
+
+solution:
+  description: |
+    PV is cluster-scoped (no namespace). The PVC binds by matching capacity +
+    accessMode. The Pod references the PVC by claimName under spec.volumes, then
+    mounts that volume into the container.
+  commands:
+    - "# apply all three objects"
+  manifests:
+    - |
+      apiVersion: v1
+      kind: PersistentVolume
+      metadata:
+        name: data-pv
+      spec:
+        capacity:
+          storage: 1Gi
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: ""
+        hostPath:
+          path: /mnt/data
+    - |
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: data-pvc
+        namespace: "{{.ns}}"
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: ""
+        resources:
+          requests:
+            storage: 1Gi
+    - |
+      apiVersion: v1
+      kind: Pod
+      metadata:
+        name: app
+        namespace: "{{.ns}}"
+      spec:
+        containers:
+          - name: app
+            image: nginx:1.27
+            volumeMounts:
+              - name: data
+                mountPath: /data
+        volumes:
+          - name: data
+            persistentVolumeClaim:
+              claimName: data-pvc
+
+cleanup:
+  cluster_scoped:
+    - kind: PersistentVolume
+      name: data-pv

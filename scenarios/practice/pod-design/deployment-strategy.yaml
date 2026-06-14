@@ -1,0 +1,81 @@
+id: deployment-strategy
+title: "Configure a Deployment update strategy"
+mode: practice
+domain: pod-design
+weight: 1
+estimated_minutes: 4
+randomize: true
+references:
+  - https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#strategy
+
+params:
+  appName: { pick: [web, api, cache] }
+  maxSurge: { pick: ["25%", "1"] }
+  maxUnavailable: { pick: ["0", "25%"] }
+
+variants:
+  - name: rolling
+    weight: 2
+    prompt: |
+      In `{{.ns}}`, create a Deployment `{{.appName}}` (image `nginx:1.27`,
+      2 replicas) using a **RollingUpdate** strategy with
+      `maxSurge: {{.maxSurge}}` and `maxUnavailable: {{.maxUnavailable}}`.
+    verify:
+      - kind: Deployment
+        name: "{{.appName}}"
+        assert:
+          - path: "{.spec.strategy.type}"
+            equals: "RollingUpdate"
+          - path: "{.spec.strategy.rollingUpdate.maxSurge}"
+            equals: "{{.maxSurge}}"
+          - path: "{.spec.strategy.rollingUpdate.maxUnavailable}"
+            equals: "{{.maxUnavailable}}"
+
+  - name: recreate
+    weight: 1
+    prompt: |
+      In `{{.ns}}`, create a Deployment `{{.appName}}` (image `nginx:1.27`,
+      2 replicas) using the **Recreate** strategy (old Pods are killed before
+      new ones start).
+    verify:
+      - kind: Deployment
+        name: "{{.appName}}"
+        assert:
+          - path: "{.spec.strategy.type}"
+            equals: "Recreate"
+
+solution:
+  description: |
+    RollingUpdate replaces Pods gradually (maxSurge = extra Pods allowed above
+    desired; maxUnavailable = how many may be down). Recreate tears all old Pods
+    down first — simpler, but with downtime.
+  manifests:
+    - |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: {{.appName}}
+        namespace: {{.ns}}
+      spec:
+        replicas: 2
+        selector:
+          matchLabels:
+            app: {{.appName}}
+        strategy:
+          {{- if eq .variant "rolling"}}
+          type: RollingUpdate
+          rollingUpdate:
+            maxSurge: {{.maxSurge}}
+            maxUnavailable: {{.maxUnavailable}}
+          {{- end}}
+          {{- if eq .variant "recreate"}}
+          type: Recreate
+          {{- end}}
+        template:
+          metadata:
+            labels:
+              app: {{.appName}}
+          spec:
+            containers:
+              - name: web
+                image: nginx:1.27

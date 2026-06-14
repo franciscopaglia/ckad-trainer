@@ -1,0 +1,59 @@
+id: deployment-scale
+title: "Create and scale a Deployment"
+mode: practice
+domain: pod-design
+weight: 1
+estimated_minutes: 4
+randomize: true
+references:
+  - https://kubernetes.io/docs/concepts/workloads/controllers/deployment/
+
+params:
+  appName: { pick: [web, api, frontend] }
+  image: { pick: ["nginx:1.27", "nginx:1.26"] }
+  replicas: { range: { min: 2, max: 5 } }
+
+prompt: |
+  In `{{.ns}}`, create a Deployment `{{.appName}}` using image `{{.image}}`
+  with `{{.replicas}}` replicas. Make sure all replicas become ready.
+
+hints:
+  - "kubectl create deployment {{.appName}} --image={{.image}} --replicas={{.replicas}}"
+  - "kubectl get deploy {{.appName}} -n {{.ns}} -w"
+
+verify:
+  - kind: Deployment
+    name: "{{.appName}}"
+    assert:
+      - path: "{.spec.replicas}"
+        equals: "{{.replicas}}"
+      - path: "{.spec.template.spec.containers[0].image}"
+        equals: "{{.image}}"
+      - path: "{.status.readyReplicas}"
+        equals: "{{.replicas}}"
+        wait: "90s"
+
+solution:
+  description: |
+    A Deployment manages a ReplicaSet of identical Pods. spec.replicas sets the
+    desired count; status.readyReplicas reports how many are passing readiness.
+  manifests:
+    - |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: {{.appName}}
+        namespace: {{.ns}}
+      spec:
+        replicas: {{.replicas}}
+        selector:
+          matchLabels:
+            app: {{.appName}}
+        template:
+          metadata:
+            labels:
+              app: {{.appName}}
+          spec:
+            containers:
+              - name: web
+                image: {{.image}}

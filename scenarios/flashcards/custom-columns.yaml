@@ -1,0 +1,13 @@
+id: fc-custom-columns
+title: "custom-columns output"
+mode: flashcard
+domain: observability
+references:
+  - https://kubernetes.io/docs/reference/kubectl/
+
+prompt: |
+  Show Pods in the current namespace as a table with just two columns:
+  NAME (from metadata.name) and STATUS (from status.phase).
+solution:
+  commands:
+    - "kubectl get pods -o custom-columns=NAME:.metadata.name,STATUS:.status.phase"

@@ -1,0 +1,64 @@
+id: networkpolicy-egress
+title: "Restrict egress with a NetworkPolicy"
+mode: practice
+domain: services-networking
+weight: 1
+estimated_minutes: 5
+randomize: true
+references:
+  - https://kubernetes.io/docs/concepts/services-networking/network-policies/
+
+params:
+  npName: { pick: [egress-lock, allow-db, restrict-out] }
+  appLabel: { pick: [api, worker, app] }
+  toKey: { pick: [app, role] }
+  toVal: { pick: [db, cache, payments] }
+  port: { pick: ["5432", "6379", "443"] }
+
+prompt: |
+  In `{{.ns}}`, create a NetworkPolicy `{{.npName}}` that applies to Pods
+  labelled `app={{.appLabel}}` and allows EGRESS only to Pods labelled
+  `{{.toKey}}={{.toVal}}` on TCP port `{{.port}}`. Set policyTypes to Egress.
+
+hints:
+  - "egress mirrors ingress but with `to` instead of `from`."
+  - "listing Egress in policyTypes with one rule denies all other outbound traffic."
+
+verify:
+  - kind: NetworkPolicy
+    name: "{{.npName}}"
+    assert:
+      - path: "{.spec.podSelector.matchLabels.app}"
+        equals: "{{.appLabel}}"
+      - path: "{.spec.policyTypes[*]}"
+        contains: "Egress"
+      - path: "{.spec.egress[0].to[0].podSelector.matchLabels.{{.toKey}}}"
+        equals: "{{.toVal}}"
+      - path: "{.spec.egress[0].ports[0].port}"
+        equals: "{{.port}}"
+
+solution:
+  description: |
+    Egress policies constrain where selected Pods may connect. Note: enforcement
+    requires a NetworkPolicy-aware CNI.
+  manifests:
+    - |
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: {{.npName}}
+        namespace: {{.ns}}
+      spec:
+        podSelector:
+          matchLabels:
+            app: {{.appLabel}}
+        policyTypes:
+          - Egress
+        egress:
+          - to:
+              - podSelector:
+                  matchLabels:
+                    {{.toKey}}: {{.toVal}}
+            ports:
+              - protocol: TCP
+                port: {{.port}}

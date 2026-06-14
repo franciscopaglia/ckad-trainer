@@ -1,0 +1,13 @@
+cluster:
+  provider: minikube
+  context: minikube
+  kubectl: kubectl
+  auto_start: true
+namespace_prefix: ckad
+defaults:
+  exam:
+    count: 16
+    minutes: 120
+safety:
+  require_context: minikube
+# scenario_dir: ./scenarios   # uncomment to author against disk instead of embed

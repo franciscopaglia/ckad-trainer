@@ -1,0 +1,13 @@
+id: fc-wait-condition
+title: "wait for a pod condition"
+mode: flashcard
+domain: observability
+references:
+  - https://kubernetes.io/docs/reference/kubectl/
+
+prompt: |
+  Block until Pod `app` in namespace `web` reports condition Ready, giving up
+  after 60 seconds.
+solution:
+  commands:
+    - "kubectl wait --for=condition=Ready pod/app -n web --timeout=60s"

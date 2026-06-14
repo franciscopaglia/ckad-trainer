@@ -1,0 +1,110 @@
+id: service-expose
+title: "Expose a Deployment with a Service"
+mode: practice
+domain: services-networking
+weight: 1
+estimated_minutes: 5
+randomize: true
+references:
+  - https://kubernetes.io/docs/concepts/services-networking/service/
+
+params:
+  appName: { pick: [web, store, api] }
+  svcName: { pick: [web-svc, store-svc, api-svc] }
+  port: { pick: ["80", "8080", "9000"] }
+
+# A Deployment of one nginx pod already runs, labelled app={{.appName}}.
+setup:
+  manifests:
+    - |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: {{.appName}}
+        namespace: {{.ns}}
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: {{.appName}}
+        template:
+          metadata:
+            labels:
+              app: {{.appName}}
+          spec:
+            containers:
+              - name: web
+                image: nginx:1.27
+                ports:
+                  - containerPort: 80
+
+variants:
+  - name: ClusterIP
+    weight: 2
+    prompt: |
+      In `{{.ns}}`, expose Deployment `{{.appName}}` with a **ClusterIP** Service
+      named `{{.svcName}}` on port `{{.port}}` targeting container port `80`.
+      Confirm the Service gets an endpoint.
+    verify:
+      - kind: Service
+        name: "{{.svcName}}"
+        assert:
+          - path: "{.spec.type}"
+            equals: "ClusterIP"
+          - path: "{.spec.ports[0].port}"
+            equals: "{{.port}}"
+          - path: "{.spec.ports[0].targetPort}"
+            equals: "80"
+          - path: "{.spec.selector.app}"
+            equals: "{{.appName}}"
+      - kind: Endpoints
+        name: "{{.svcName}}"
+        assert:
+          - path: "{.subsets[0].addresses[0].ip}"
+            exists: true
+            wait: "60s"
+
+  - name: NodePort
+    weight: 1
+    prompt: |
+      In `{{.ns}}`, expose Deployment `{{.appName}}` with a **NodePort** Service
+      named `{{.svcName}}` on port `{{.port}}` targeting container port `80`.
+      Confirm the Service gets an endpoint.
+    verify:
+      - kind: Service
+        name: "{{.svcName}}"
+        assert:
+          - path: "{.spec.type}"
+            equals: "NodePort"
+          - path: "{.spec.ports[0].port}"
+            equals: "{{.port}}"
+          - path: "{.spec.ports[0].targetPort}"
+            equals: "80"
+          - path: "{.spec.selector.app}"
+            equals: "{{.appName}}"
+      - kind: Endpoints
+        name: "{{.svcName}}"
+        assert:
+          - path: "{.subsets[0].addresses[0].ip}"
+            exists: true
+            wait: "60s"
+
+solution:
+  description: |
+    A Service selects Pods by label and load-balances to them. Endpoints are
+    populated automatically from the Pods matching the selector that are Ready.
+    `kubectl expose deploy {{.appName}} --name {{.svcName}} --port {{.port}} --target-port 80 --type {{.variant}}`
+  manifests:
+    - |
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: {{.svcName}}
+        namespace: {{.ns}}
+      spec:
+        type: {{.variant}}
+        selector:
+          app: {{.appName}}
+        ports:
+          - port: {{.port}}
+            targetPort: 80

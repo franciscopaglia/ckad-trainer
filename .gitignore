@@ -1,0 +1,15 @@
+# Built binary
+/ckad-trainer
+
+# Local runtime state (resolved scenario instances)
+/state/
+
+# Local config (may contain a real context name)
+/config.yaml
+
+# Editor / OS cruft
+*.swp
+.DS_Store
+
+# Local Claude Code settings (machine-specific)
+.claude/settings.local.json

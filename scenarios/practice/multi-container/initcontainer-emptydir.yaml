@@ -1,0 +1,67 @@
+id: initcontainer-emptydir
+title: "Init container prepares data for the main container"
+mode: practice
+domain: multi-container
+weight: 1
+estimated_minutes: 5
+randomize: false
+references:
+  - https://kubernetes.io/docs/concepts/workloads/pods/init-containers/
+
+prompt: |
+  In `{{.ns}}`, create a Pod `bootstrap` that:
+    - has an init container `init` (image `busybox:1.36`) which runs
+      `sh -c 'echo ready > /work/status'`,
+    - has a main container `app` (image `busybox:1.36`, command `sleep 3600`),
+    - both mount a shared `emptyDir` volume at `/work`.
+
+hints:
+  - "Init containers run to completion, in order, before the app containers start."
+  - "Pass data forward by writing into a shared emptyDir."
+
+verify:
+  - kind: Pod
+    name: bootstrap
+    assert:
+      - path: "{.spec.initContainers[0].name}"
+        equals: "init"
+      - path: "{.spec.initContainers[0].volumeMounts[0].mountPath}"
+        equals: "/work"
+      - path: "{.spec.containers[0].volumeMounts[0].mountPath}"
+        equals: "/work"
+      - path: "{.spec.volumes[0].emptyDir}"
+        exists: true
+      - path: "{.status.phase}"
+        equals: "Running"
+        wait: "60s"
+
+solution:
+  description: |
+    The init container writes into the shared emptyDir and exits; only then does
+    the main container start and can read the file.
+  manifests:
+    - |
+      apiVersion: v1
+      kind: Pod
+      metadata:
+        name: bootstrap
+        namespace: {{.ns}}
+      spec:
+        restartPolicy: Never
+        volumes:
+          - name: work
+            emptyDir: {}
+        initContainers:
+          - name: init
+            image: busybox:1.36
+            command: ["sh", "-c", "echo ready > /work/status"]
+            volumeMounts:
+              - name: work
+                mountPath: /work
+        containers:
+          - name: app
+            image: busybox:1.36
+            command: ["sleep", "3600"]
+            volumeMounts:
+              - name: work
+                mountPath: /work

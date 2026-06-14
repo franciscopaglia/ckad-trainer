@@ -1,0 +1,88 @@
+id: service-selector-fix
+title: "Debug: fix a Service with no endpoints"
+mode: practice
+domain: services-networking
+weight: 1
+estimated_minutes: 4
+randomize: false
+references:
+  - https://kubernetes.io/docs/concepts/services-networking/service/
+
+# A Deployment (app=web) and a Service exist, but the Service has the wrong
+# selector (app=webb), so it has no endpoints and routes nowhere.
+setup:
+  manifests:
+    - |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: web
+        namespace: {{.ns}}
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: web
+        template:
+          metadata:
+            labels:
+              app: web
+          spec:
+            containers:
+              - name: web
+                image: nginx:1.27
+                ports:
+                  - containerPort: 80
+    - |
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: web
+        namespace: {{.ns}}
+      spec:
+        selector:
+          app: webb
+        ports:
+          - port: 80
+            targetPort: 80
+
+prompt: |
+  In `{{.ns}}`, Service `web` has no endpoints so traffic goes nowhere. The
+  Deployment's Pods are labelled `app=web`. Fix the Service so it selects them
+  and gets an endpoint.
+
+hints:
+  - "kubectl get endpoints web -n {{.ns}} - empty means the selector matches no Pods."
+  - "Compare the Service selector with the Pod labels (kubectl get pods --show-labels)."
+
+verify:
+  - kind: Service
+    name: web
+    assert:
+      - path: "{.spec.selector.app}"
+        equals: "web"
+  - kind: Endpoints
+    name: web
+    assert:
+      - path: "{.subsets[0].addresses[0].ip}"
+        exists: true
+        wait: "60s"
+
+solution:
+  description: |
+    A Service finds its backends by label selector. The selector said app=webb
+    but the Pods are app=web, so no Pod matched and Endpoints stayed empty. Fixing
+    the selector lets the endpoints controller populate it.
+  manifests:
+    - |
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: web
+        namespace: {{.ns}}
+      spec:
+        selector:
+          app: web
+        ports:
+          - port: 80
+            targetPort: 80

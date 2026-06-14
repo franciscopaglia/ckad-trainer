@@ -1,0 +1,40 @@
+id: cm-from-literals
+title: "Imperatively create a ConfigMap from literals"
+mode: practice
+domain: configuration
+weight: 1
+estimated_minutes: 2
+randomize: true
+references:
+  - https://kubernetes.io/docs/reference/kubectl/generated/kubectl_create/kubectl_create_configmap/
+
+params:
+  cmName: { pick: [settings, env-config, feature-flags] }
+  k1: { pick: [LOG_LEVEL, MODE, TIER] }
+  v1: { pick: [debug, prod, gold] }
+  k2: { pick: [REGION, ZONE, STAGE] }
+  v2: { pick: [eu-west, us-east, canary] }
+
+prompt: |
+  Using `kubectl` imperatively (no YAML file), create a ConfigMap `{{.cmName}}`
+  in `{{.ns}}` with two entries: `{{.k1}}={{.v1}}` and `{{.k2}}={{.v2}}`.
+
+hints:
+  - "kubectl create configmap NAME --from-literal=key=value --from-literal=key2=value2"
+  - "remember -n {{.ns}}"
+
+verify:
+  - kind: ConfigMap
+    name: "{{.cmName}}"
+    assert:
+      - path: "{.data.{{.k1}}}"
+        equals: "{{.v1}}"
+      - path: "{.data.{{.k2}}}"
+        equals: "{{.v2}}"
+
+solution:
+  description: |
+    `--from-literal` can be repeated to add multiple keys. This is faster than
+    writing YAML for small ConfigMaps.
+  commands:
+    - "kubectl create configmap {{.cmName}} -n {{.ns}} --from-literal={{.k1}}={{.v1}} --from-literal={{.k2}}={{.v2}}"

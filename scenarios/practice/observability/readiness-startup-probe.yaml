@@ -1,0 +1,69 @@
+id: readiness-startup-probe
+title: "Add readiness and startup probes"
+mode: practice
+domain: observability
+weight: 1
+estimated_minutes: 5
+randomize: true
+references:
+  - https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
+
+params:
+  podName: { pattern: "ready-{{randInt 100 999}}" }
+  period: { pick: ["5", "10"] }
+  failureThreshold: { pick: ["3", "5", "30"] }
+
+prompt: |
+  In `{{.ns}}`, create a Pod `{{.podName}}` (image `nginx:1.27`, container
+  `web`, containerPort 80) with BOTH:
+    - a readinessProbe: HTTP GET `/` on port `80`, `periodSeconds: {{.period}}`
+    - a startupProbe:   HTTP GET `/` on port `80`,
+      `failureThreshold: {{.failureThreshold}}`, `periodSeconds: {{.period}}`
+
+hints:
+  - "Readiness gates traffic (Endpoints); startup gives a slow starter time before liveness/readiness apply."
+  - "kubectl explain pod.spec.containers.startupProbe"
+
+verify:
+  - kind: Pod
+    name: "{{.podName}}"
+    assert:
+      - path: "{.spec.containers[0].readinessProbe.httpGet.port}"
+        equals: "80"
+      - path: "{.spec.containers[0].readinessProbe.periodSeconds}"
+        equals: "{{.period}}"
+      - path: "{.spec.containers[0].startupProbe.httpGet.path}"
+        equals: "/"
+      - path: "{.spec.containers[0].startupProbe.failureThreshold}"
+        equals: "{{.failureThreshold}}"
+      - path: "{.spec.containers[0].startupProbe.periodSeconds}"
+        equals: "{{.period}}"
+
+solution:
+  description: |
+    startupProbe runs first; until it succeeds, readiness and liveness are
+    suspended. readinessProbe then controls whether the Pod receives traffic.
+  manifests:
+    - |
+      apiVersion: v1
+      kind: Pod
+      metadata:
+        name: {{.podName}}
+        namespace: {{.ns}}
+      spec:
+        containers:
+          - name: web
+            image: nginx:1.27
+            ports:
+              - containerPort: 80
+            readinessProbe:
+              httpGet:
+                path: /
+                port: 80
+              periodSeconds: {{.period}}
+            startupProbe:
+              httpGet:
+                path: /
+                port: 80
+              failureThreshold: {{.failureThreshold}}
+              periodSeconds: {{.period}}

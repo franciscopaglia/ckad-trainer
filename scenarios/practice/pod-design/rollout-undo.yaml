@@ -1,0 +1,65 @@
+id: rollout-undo
+title: "Roll back a Deployment to its previous revision"
+mode: practice
+domain: pod-design
+weight: 1
+estimated_minutes: 4
+randomize: true
+references:
+  - https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#rolling-back-a-deployment
+
+params:
+  appName: { pick: [web, shop, portal] }
+
+# A Deployment already exists at nginx:1.26 and has since been updated to 1.27
+# (so there are two revisions). The current image is the broken 1.27.
+setup:
+  manifests:
+    - |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: {{.appName}}
+        namespace: {{.ns}}
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: {{.appName}}
+        template:
+          metadata:
+            labels:
+              app: {{.appName}}
+          spec:
+            containers:
+              - name: web
+                image: nginx:1.26
+  commands:
+    - "kubectl rollout status deployment/{{.appName}} -n {{.ns}} --timeout=90s"
+    - "kubectl set image deployment/{{.appName}} web=nginx:1.27 -n {{.ns}}"
+
+prompt: |
+  In `{{.ns}}`, Deployment `{{.appName}}` was just updated to `nginx:1.27`, which
+  is bad. Roll it back to the previous revision (`nginx:1.26`) and confirm it is
+  ready again.
+
+hints:
+  - "kubectl rollout undo deployment/{{.appName}} -n {{.ns}}"
+  - "kubectl rollout history deployment/{{.appName}} -n {{.ns}}"
+
+verify:
+  - kind: Deployment
+    name: "{{.appName}}"
+    assert:
+      - path: "{.spec.template.spec.containers[0].image}"
+        equals: "nginx:1.26"
+      - path: "{.status.readyReplicas}"
+        equals: "1"
+        wait: "90s"
+
+solution:
+  description: |
+    `rollout undo` reverts to the previous ReplicaSet/revision. Add
+    `--to-revision=N` to target a specific one (see `rollout history`).
+  commands:
+    - "kubectl rollout undo deployment/{{.appName}} -n {{.ns}}"

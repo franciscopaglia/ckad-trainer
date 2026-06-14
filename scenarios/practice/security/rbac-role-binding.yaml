@@ -1,0 +1,85 @@
+id: rbac-role-binding
+title: "Grant a ServiceAccount read access with RBAC"
+mode: practice
+domain: security
+weight: 1
+estimated_minutes: 6
+randomize: true
+references:
+  - https://kubernetes.io/docs/reference/access-authn-authz/rbac/
+
+params:
+  saName: { pick: [viewer, app-sa, reporter] }
+  roleName: { pick: [pod-reader, ns-viewer, read-only] }
+  bindName: { pick: [read-binding, grant-read, sa-bind] }
+  resource: { pick: [pods, configmaps, services] }
+
+# The ServiceAccount already exists.
+setup:
+  manifests:
+    - |
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: {{.saName}}
+        namespace: {{.ns}}
+
+prompt: |
+  In `{{.ns}}`:
+  1. Create a Role `{{.roleName}}` that allows `get`, `list`, `watch` on
+     `{{.resource}}` (core API group).
+  2. Create a RoleBinding `{{.bindName}}` that binds `{{.roleName}}` to the
+     ServiceAccount `{{.saName}}`.
+
+hints:
+  - "kubectl create role {{.roleName}} -n {{.ns}} --verb=get,list,watch --resource={{.resource}}"
+  - "kubectl create rolebinding {{.bindName}} -n {{.ns}} --role={{.roleName}} --serviceaccount={{.ns}}:{{.saName}}"
+
+verify:
+  - kind: Role
+    name: "{{.roleName}}"
+    assert:
+      - path: "{.rules[0].resources[*]}"
+        contains: "{{.resource}}"
+      - path: "{.rules[0].verbs[*]}"
+        contains: "get"
+  - kind: RoleBinding
+    name: "{{.bindName}}"
+    assert:
+      - path: "{.roleRef.name}"
+        equals: "{{.roleName}}"
+      - path: "{.subjects[0].kind}"
+        equals: "ServiceAccount"
+      - path: "{.subjects[0].name}"
+        equals: "{{.saName}}"
+
+solution:
+  description: |
+    A Role lists allowed verbs on resources within a namespace; a RoleBinding
+    grants that Role to a subject (here a ServiceAccount). Verify with
+    `kubectl auth can-i list {{.resource}} --as=system:serviceaccount:{{.ns}}:{{.saName}} -n {{.ns}}`.
+  manifests:
+    - |
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: Role
+      metadata:
+        name: {{.roleName}}
+        namespace: {{.ns}}
+      rules:
+        - apiGroups: [""]
+          resources: ["{{.resource}}"]
+          verbs: ["get", "list", "watch"]
+    - |
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: RoleBinding
+      metadata:
+        name: {{.bindName}}
+        namespace: {{.ns}}
+      roleRef:
+        apiGroup: rbac.authorization.k8s.io
+        kind: Role
+        name: {{.roleName}}
+      subjects:
+        - kind: ServiceAccount
+          name: {{.saName}}
+          namespace: {{.ns}}

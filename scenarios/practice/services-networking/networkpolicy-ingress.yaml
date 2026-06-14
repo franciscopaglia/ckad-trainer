@@ -1,0 +1,66 @@
+id: networkpolicy-ingress
+title: "Restrict ingress with a NetworkPolicy"
+mode: practice
+domain: services-networking
+weight: 1
+estimated_minutes: 6
+randomize: true
+references:
+  - https://kubernetes.io/docs/concepts/services-networking/network-policies/
+
+params:
+  npName: { pick: [allow-frontend, restrict-db, api-ingress] }
+  appLabel: { pick: [db, api, backend] }
+  fromKey: { pick: [role, tier] }
+  fromVal: { pick: [frontend, cache, proxy] }
+  port: { pick: ["80", "5432", "6379"] }
+
+prompt: |
+  In `{{.ns}}`, create a NetworkPolicy `{{.npName}}` that applies to Pods
+  labelled `app={{.appLabel}}` and allows ingress ONLY from Pods labelled
+  `{{.fromKey}}={{.fromVal}}` on TCP port `{{.port}}` (default-deny everything
+  else). Set policyTypes to Ingress.
+
+hints:
+  - "An empty `ingress` denies all; one rule with a `from` selector allows just that source."
+  - "podSelector selects the Pods the policy protects; from[].podSelector selects allowed sources."
+
+verify:
+  - kind: NetworkPolicy
+    name: "{{.npName}}"
+    assert:
+      - path: "{.spec.podSelector.matchLabels.app}"
+        equals: "{{.appLabel}}"
+      - path: "{.spec.policyTypes[*]}"
+        contains: "Ingress"
+      - path: "{.spec.ingress[0].from[0].podSelector.matchLabels.{{.fromKey}}}"
+        equals: "{{.fromVal}}"
+      - path: "{.spec.ingress[0].ports[0].port}"
+        equals: "{{.port}}"
+
+solution:
+  description: |
+    The podSelector chooses which Pods the policy governs. Listing Ingress in
+    policyTypes with a single from-rule means "deny all ingress except what this
+    rule allows". Note: enforcement requires a NetworkPolicy-aware CNI.
+  manifests:
+    - |
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: {{.npName}}
+        namespace: {{.ns}}
+      spec:
+        podSelector:
+          matchLabels:
+            app: {{.appLabel}}
+        policyTypes:
+          - Ingress
+        ingress:
+          - from:
+              - podSelector:
+                  matchLabels:
+                    {{.fromKey}}: {{.fromVal}}
+            ports:
+              - protocol: TCP
+                port: {{.port}}

@@ -1,0 +1,13 @@
+id: fc-jsonpath-pod-names
+title: "jsonpath: pod names"
+mode: flashcard
+domain: core-concepts
+references:
+  - https://kubernetes.io/docs/reference/kubectl/jsonpath/
+
+prompt: |
+  Print the names of all Pods in namespace `web`, space-separated on one line,
+  using a jsonpath output template.
+solution:
+  commands:
+    - "kubectl get pods -n web -o jsonpath='{.items[*].metadata.name}'"

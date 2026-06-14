@@ -1,0 +1,95 @@
+id: fix-broken-probe
+title: "Debug: fix a failing liveness probe"
+mode: practice
+domain: observability
+weight: 1
+estimated_minutes: 5
+randomize: false
+references:
+  - https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
+
+# A Deployment is deployed but its pods keep restarting: the liveness probe
+# points at the wrong port (8080) while nginx serves on 80.
+setup:
+  manifests:
+    - |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: web
+        namespace: {{.ns}}
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: web
+        template:
+          metadata:
+            labels:
+              app: web
+          spec:
+            containers:
+              - name: web
+                image: nginx:1.27
+                ports:
+                  - containerPort: 80
+                livenessProbe:
+                  httpGet:
+                    path: /
+                    port: 8080
+                  initialDelaySeconds: 3
+                  periodSeconds: 5
+                  failureThreshold: 2
+
+prompt: |
+  In `{{.ns}}`, Deployment `web` keeps restarting its Pod. Investigate
+  (`kubectl describe`/`logs`) and fix the liveness probe so the Pod stays healthy.
+  The container serves HTTP on port 80.
+
+hints:
+  - "kubectl describe pod -n {{.ns}} - look at the probe failure events."
+  - "The probe port must match the container's listening port (80)."
+
+verify:
+  - kind: Deployment
+    name: web
+    assert:
+      - path: "{.spec.template.spec.containers[0].livenessProbe.httpGet.port}"
+        equals: "80"
+      - path: "{.status.readyReplicas}"
+        equals: "1"
+        wait: "90s"
+
+solution:
+  description: |
+    The probe was hitting port 8080, which nothing listens on, so every check
+    failed and the kubelet restarted the container. Point it at port 80.
+  manifests:
+    - |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: web
+        namespace: {{.ns}}
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: web
+        template:
+          metadata:
+            labels:
+              app: web
+          spec:
+            containers:
+              - name: web
+                image: nginx:1.27
+                ports:
+                  - containerPort: 80
+                livenessProbe:
+                  httpGet:
+                    path: /
+                    port: 80
+                  initialDelaySeconds: 3
+                  periodSeconds: 5
+                  failureThreshold: 2

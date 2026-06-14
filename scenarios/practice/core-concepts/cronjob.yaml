@@ -1,0 +1,61 @@
+id: cronjob
+title: "Create a CronJob with schedule and policies"
+mode: practice
+domain: core-concepts
+weight: 1
+estimated_minutes: 4
+randomize: true
+references:
+  - https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/
+
+params:
+  cjName: { pick: [report, backup, cleanup] }
+  schedule: { pick: ["*/5 * * * *", "0 * * * *", "*/1 * * * *"] }
+  concurrency: { pick: [Forbid, Allow, Replace] }
+  histLimit: { range: { min: 1, max: 5 } }
+
+prompt: |
+  In `{{.ns}}`, create a CronJob `{{.cjName}}` (image `busybox:1.36`, command
+  `date`) on schedule `{{.schedule}}`, with `concurrencyPolicy: {{.concurrency}}`
+  and `successfulJobsHistoryLimit: {{.histLimit}}`.
+
+hints:
+  - "concurrencyPolicy controls overlap: Allow / Forbid / Replace."
+  - "the Job's Pod template needs restartPolicy OnFailure or Never."
+
+verify:
+  - kind: CronJob
+    name: "{{.cjName}}"
+    assert:
+      - path: "{.spec.schedule}"
+        equals: "{{.schedule}}"
+      - path: "{.spec.concurrencyPolicy}"
+        equals: "{{.concurrency}}"
+      - path: "{.spec.successfulJobsHistoryLimit}"
+        equals: "{{.histLimit}}"
+
+solution:
+  description: |
+    A CronJob creates Jobs on a cron schedule. concurrencyPolicy decides what
+    happens when a run is still going at the next tick; the history limits cap how
+    many finished Jobs are retained.
+  manifests:
+    - |
+      apiVersion: batch/v1
+      kind: CronJob
+      metadata:
+        name: {{.cjName}}
+        namespace: {{.ns}}
+      spec:
+        schedule: "{{.schedule}}"
+        concurrencyPolicy: {{.concurrency}}
+        successfulJobsHistoryLimit: {{.histLimit}}
+        jobTemplate:
+          spec:
+            template:
+              spec:
+                restartPolicy: OnFailure
+                containers:
+                  - name: task
+                    image: busybox:1.36
+                    command: ["date"]

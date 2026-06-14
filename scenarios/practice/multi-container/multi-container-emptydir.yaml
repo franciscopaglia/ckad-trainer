@@ -1,0 +1,70 @@
+id: multi-container-emptydir
+title: "Two containers sharing an emptyDir"
+mode: practice
+domain: multi-container
+weight: 1
+estimated_minutes: 6
+randomize: true
+references:
+  - https://kubernetes.io/docs/concepts/storage/volumes/#emptydir
+
+params:
+  podName: { pattern: "shared-{{randInt 100 999}}" }
+  mountPath: { pick: ["/data", "/shared", "/var/log/app"] }
+
+prompt: |
+  In `{{.ns}}`, create a Pod `{{.podName}}` with TWO containers, both
+  `busybox:1.36` running `sleep 3600`:
+    - `app`
+    - `sidecar`
+  They share an `emptyDir` volume mounted at `{{.mountPath}}` in BOTH containers.
+
+hints:
+  - "An emptyDir lives as long as the Pod and is shared by all containers that mount it."
+  - "Each container needs its own volumeMounts entry pointing at the same volume."
+
+verify:
+  - kind: Pod
+    name: "{{.podName}}"
+    assert:
+      - path: "{.spec.containers[*].name}"
+        contains: "app"
+      - path: "{.spec.containers[*].name}"
+        contains: "sidecar"
+      - path: "{.spec.volumes[0].emptyDir}"
+        exists: true
+      - path: '{.spec.containers[?(@.name=="app")].volumeMounts[0].mountPath}'
+        equals: "{{.mountPath}}"
+      - path: '{.spec.containers[?(@.name=="sidecar")].volumeMounts[0].mountPath}'
+        equals: "{{.mountPath}}"
+
+solution:
+  description: |
+    A single Pod can run multiple containers that share storage via an emptyDir.
+    Both containers mount the same named volume; data written by one is visible
+    to the other.
+  manifests:
+    - |
+      apiVersion: v1
+      kind: Pod
+      metadata:
+        name: {{.podName}}
+        namespace: {{.ns}}
+      spec:
+        restartPolicy: Never
+        volumes:
+          - name: shared
+            emptyDir: {}
+        containers:
+          - name: app
+            image: busybox:1.36
+            command: ["sleep", "3600"]
+            volumeMounts:
+              - name: shared
+                mountPath: {{.mountPath}}
+          - name: sidecar
+            image: busybox:1.36
+            command: ["sleep", "3600"]
+            volumeMounts:
+              - name: shared
+                mountPath: {{.mountPath}}

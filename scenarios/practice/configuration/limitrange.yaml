@@ -1,0 +1,61 @@
+id: limitrange
+title: "Set default requests/limits with a LimitRange"
+mode: practice
+domain: configuration
+weight: 1
+estimated_minutes: 4
+randomize: true
+references:
+  - https://kubernetes.io/docs/concepts/policy/limit-range/
+
+params:
+  lrName: { pick: [defaults, container-limits, ns-defaults] }
+  defCpu: { pick: ["500m", "1"] }
+  defMem: { pick: ["256Mi", "512Mi"] }
+  reqCpu: { pick: ["100m", "250m"] }
+  reqMem: { pick: ["64Mi", "128Mi"] }
+
+prompt: |
+  In `{{.ns}}`, create a LimitRange `{{.lrName}}` that, for type `Container`,
+  sets default limits cpu `{{.defCpu}}` / memory `{{.defMem}}` and default
+  requests cpu `{{.reqCpu}}` / memory `{{.reqMem}}`.
+
+hints:
+  - "default = the limit applied when a container omits one; defaultRequest = the request."
+  - "kubectl explain limitrange.spec.limits"
+
+verify:
+  - kind: LimitRange
+    name: "{{.lrName}}"
+    assert:
+      - path: "{.spec.limits[0].type}"
+        equals: "Container"
+      - path: "{.spec.limits[0].default.cpu}"
+        equals: "{{.defCpu}}"
+      - path: "{.spec.limits[0].default.memory}"
+        equals: "{{.defMem}}"
+      - path: "{.spec.limits[0].defaultRequest.cpu}"
+        equals: "{{.reqCpu}}"
+      - path: "{.spec.limits[0].defaultRequest.memory}"
+        equals: "{{.reqMem}}"
+
+solution:
+  description: |
+    A LimitRange supplies default requests/limits that Pods in the namespace
+    inherit when they don't set their own.
+  manifests:
+    - |
+      apiVersion: v1
+      kind: LimitRange
+      metadata:
+        name: {{.lrName}}
+        namespace: {{.ns}}
+      spec:
+        limits:
+          - type: Container
+            default:
+              cpu: "{{.defCpu}}"
+              memory: "{{.defMem}}"
+            defaultRequest:
+              cpu: "{{.reqCpu}}"
+              memory: "{{.reqMem}}"

@@ -1,0 +1,13 @@
+id: fc-field-selector
+title: "field-selector: running pods"
+mode: flashcard
+domain: core-concepts
+references:
+  - https://kubernetes.io/docs/concepts/overview/working-with-objects/field-selectors/
+
+prompt: |
+  List only the Pods in the current namespace whose status.phase is Running,
+  using a field selector (not a label selector).
+solution:
+  commands:
+    - "kubectl get pods --field-selector=status.phase=Running"

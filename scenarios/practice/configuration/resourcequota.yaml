@@ -1,0 +1,53 @@
+id: resourcequota
+title: "Create a ResourceQuota for a namespace"
+mode: practice
+domain: configuration
+weight: 1
+estimated_minutes: 4
+randomize: true
+references:
+  - https://kubernetes.io/docs/concepts/policy/resource-quotas/
+
+params:
+  rqName: { pick: [team-quota, compute-quota, ns-limits] }
+  cpu: { pick: ["2", "4"] }
+  mem: { pick: ["2Gi", "4Gi"] }
+  pods: { range: { min: 5, max: 15 } }
+
+prompt: |
+  In `{{.ns}}`, create a ResourceQuota `{{.rqName}}` that caps the namespace at:
+    - `requests.cpu` = `{{.cpu}}`
+    - `requests.memory` = `{{.mem}}`
+    - `pods` = `{{.pods}}`
+
+hints:
+  - "ResourceQuota.spec.hard maps quota names to limits; keys include requests.cpu and pods."
+  - "kubectl create quota {{.rqName}} -n {{.ns}} --hard=requests.cpu={{.cpu}},requests.memory={{.mem}},pods={{.pods}}"
+
+verify:
+  - kind: ResourceQuota
+    name: "{{.rqName}}"
+    assert:
+      - path: '{.spec.hard.requests\.cpu}'
+        equals: "{{.cpu}}"
+      - path: '{.spec.hard.requests\.memory}'
+        equals: "{{.mem}}"
+      - path: "{.spec.hard.pods}"
+        equals: "{{.pods}}"
+
+solution:
+  description: |
+    A ResourceQuota limits aggregate resource use in a namespace. Once set, every
+    Pod must declare the constrained requests/limits or creation is rejected.
+  manifests:
+    - |
+      apiVersion: v1
+      kind: ResourceQuota
+      metadata:
+        name: {{.rqName}}
+        namespace: {{.ns}}
+      spec:
+        hard:
+          requests.cpu: "{{.cpu}}"
+          requests.memory: "{{.mem}}"
+          pods: "{{.pods}}"

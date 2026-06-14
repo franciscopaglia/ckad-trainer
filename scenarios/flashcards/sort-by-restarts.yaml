@@ -1,0 +1,12 @@
+id: fc-sort-by-restarts
+title: "sort pods by restart count"
+mode: flashcard
+domain: observability
+references:
+  - https://kubernetes.io/docs/reference/kubectl/quick-reference/
+
+prompt: |
+  List the Pods in the current namespace sorted by their container restart count.
+solution:
+  commands:
+    - "kubectl get pods --sort-by='.status.containerStatuses[0].restartCount'"

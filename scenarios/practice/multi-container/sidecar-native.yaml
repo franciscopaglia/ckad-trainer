@@ -1,0 +1,72 @@
+id: sidecar-native
+title: "Add a native sidecar container"
+mode: practice
+domain: multi-container
+weight: 1
+estimated_minutes: 5
+randomize: true
+references:
+  - https://kubernetes.io/docs/concepts/workloads/pods/sidecar-containers/
+
+params:
+  podName: { pattern: "sidecar-{{randInt 100 999}}" }
+  mountPath: { pick: ["/var/log/app", "/logs"] }
+
+prompt: |
+  In `{{.ns}}`, create a Pod `{{.podName}}` with:
+    - a main container `app` (image `nginx:1.27`),
+    - a NATIVE sidecar `logger` (image `busybox:1.36`, command
+      `sh -c 'sleep 3600'`) — i.e. an init container with
+      `restartPolicy: Always`,
+    - a shared `emptyDir` volume mounted at `{{.mountPath}}` in both.
+
+hints:
+  - "A native sidecar is an entry in initContainers with restartPolicy: Always."
+  - "It starts before the main container and keeps running alongside it."
+
+verify:
+  - kind: Pod
+    name: "{{.podName}}"
+    assert:
+      - path: "{.spec.initContainers[0].name}"
+        equals: "logger"
+      - path: "{.spec.initContainers[0].restartPolicy}"
+        equals: "Always"
+      - path: "{.spec.containers[0].name}"
+        equals: "app"
+      - path: "{.spec.volumes[0].emptyDir}"
+        exists: true
+      - path: "{.status.phase}"
+        equals: "Running"
+        wait: "60s"
+
+solution:
+  description: |
+    Native sidecars (init containers with restartPolicy Always) start before the
+    app, stay running for the Pod's life, and let the app start even if the
+    sidecar is still initialising.
+  manifests:
+    - |
+      apiVersion: v1
+      kind: Pod
+      metadata:
+        name: {{.podName}}
+        namespace: {{.ns}}
+      spec:
+        volumes:
+          - name: logs
+            emptyDir: {}
+        initContainers:
+          - name: logger
+            image: busybox:1.36
+            command: ["sh", "-c", "sleep 3600"]
+            restartPolicy: Always
+            volumeMounts:
+              - name: logs
+                mountPath: {{.mountPath}}
+        containers:
+          - name: app
+            image: nginx:1.27
+            volumeMounts:
+              - name: logs
+                mountPath: {{.mountPath}}

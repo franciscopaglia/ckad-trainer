@@ -1,0 +1,105 @@
+id: liveness-probe
+title: "Add a liveness probe to a Pod"
+mode: practice
+domain: observability
+weight: 1
+estimated_minutes: 5
+randomize: true
+references:
+  - https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
+
+params:
+  podName: { pattern: "live-{{randInt 100 999}}" }
+  initialDelay: { pick: ["3", "5", "10"] }
+  period: { pick: ["5", "10"] }
+
+variants:
+  - name: httpGet
+    weight: 1
+    prompt: |
+      In `{{.ns}}`, create Pod `{{.podName}}` (image `nginx:1.27`, container
+      `web`, containerPort 80) with a **livenessProbe** that does an HTTP GET on
+      path `/` port `80`, with `initialDelaySeconds: {{.initialDelay}}` and
+      `periodSeconds: {{.period}}`.
+    verify:
+      - kind: Pod
+        name: "{{.podName}}"
+        assert:
+          - path: "{.spec.containers[0].livenessProbe.httpGet.path}"
+            equals: "/"
+          - path: "{.spec.containers[0].livenessProbe.httpGet.port}"
+            equals: "80"
+          - path: "{.spec.containers[0].livenessProbe.initialDelaySeconds}"
+            equals: "{{.initialDelay}}"
+          - path: "{.spec.containers[0].livenessProbe.periodSeconds}"
+            equals: "{{.period}}"
+
+  - name: tcpSocket
+    weight: 1
+    prompt: |
+      In `{{.ns}}`, create Pod `{{.podName}}` (image `nginx:1.27`, container
+      `web`, containerPort 80) with a **livenessProbe** that checks a TCP socket
+      on port `80`, with `initialDelaySeconds: {{.initialDelay}}` and
+      `periodSeconds: {{.period}}`.
+    verify:
+      - kind: Pod
+        name: "{{.podName}}"
+        assert:
+          - path: "{.spec.containers[0].livenessProbe.tcpSocket.port}"
+            equals: "80"
+          - path: "{.spec.containers[0].livenessProbe.initialDelaySeconds}"
+            equals: "{{.initialDelay}}"
+          - path: "{.spec.containers[0].livenessProbe.periodSeconds}"
+            equals: "{{.period}}"
+
+  - name: exec
+    weight: 1
+    prompt: |
+      In `{{.ns}}`, create Pod `{{.podName}}` (image `nginx:1.27`, container
+      `web`) with a **livenessProbe** that runs the command `ls /`, with
+      `initialDelaySeconds: {{.initialDelay}}` and `periodSeconds: {{.period}}`.
+    verify:
+      - kind: Pod
+        name: "{{.podName}}"
+        assert:
+          - path: "{.spec.containers[0].livenessProbe.exec.command[*]}"
+            contains: "ls"
+          - path: "{.spec.containers[0].livenessProbe.initialDelaySeconds}"
+            equals: "{{.initialDelay}}"
+          - path: "{.spec.containers[0].livenessProbe.periodSeconds}"
+            equals: "{{.period}}"
+
+solution:
+  description: |
+    A livenessProbe restarts the container when it fails. The handler is one of
+    httpGet / tcpSocket / exec; initialDelaySeconds delays the first check and
+    periodSeconds sets the interval.
+  manifests:
+    - |
+      apiVersion: v1
+      kind: Pod
+      metadata:
+        name: {{.podName}}
+        namespace: {{.ns}}
+      spec:
+        containers:
+          - name: web
+            image: nginx:1.27
+            ports:
+              - containerPort: 80
+            livenessProbe:
+            {{- if eq .variant "httpGet"}}
+              httpGet:
+                path: /
+                port: 80
+            {{- end}}
+            {{- if eq .variant "tcpSocket"}}
+              tcpSocket:
+                port: 80
+            {{- end}}
+            {{- if eq .variant "exec"}}
+              exec:
+                command: ["ls", "/"]
+            {{- end}}
+              initialDelaySeconds: {{.initialDelay}}
+              periodSeconds: {{.period}}
