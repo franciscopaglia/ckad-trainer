@@ -13,6 +13,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"text/template"
 	"time"
@@ -202,6 +203,32 @@ func LoadInstance(id string) (*Instance, error) {
 		return nil, fmt.Errorf("reading state for %q: %w", id, err)
 	}
 	return &inst, nil
+}
+
+// LoadActiveInstances returns the instances of all currently-started scenarios,
+// oldest first. The exam session file is not a scenario and is skipped.
+func LoadActiveInstances() ([]*Instance, error) {
+	entries, err := os.ReadDir(stateDir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var insts []*Instance
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || !strings.HasSuffix(name, ".json") || name == "exam.json" {
+			continue
+		}
+		inst, err := LoadInstance(strings.TrimSuffix(name, ".json"))
+		if err != nil {
+			continue // skip unreadable state rather than failing the whole listing
+		}
+		insts = append(insts, inst)
+	}
+	sort.Slice(insts, func(i, j int) bool { return insts[i].StartedAt.Before(insts[j].StartedAt) })
+	return insts, nil
 }
 
 // HasState reports whether a scenario currently has live state.

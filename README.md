@@ -31,6 +31,10 @@ cp config.example.yaml config.yaml   # then edit: set your kube context
 ./ckad-trainer solution configmap-consume # reveal the answer
 ./ckad-trainer cleanup configmap-consume  # tear it down
 
+./ckad-trainer status                     # list active scenarios (across shells)
+./ckad-trainer status configmap-consume   # re-show a task you lost track of
+./ckad-trainer cleanup --all              # tear down every active scenario
+
 ./ckad-trainer random                     # start a random scenario
 ./ckad-trainer start pv-pvc-pod-static --seed 42   # reproducible draw
 ./ckad-trainer drill                      # kubectl command-format flashcards

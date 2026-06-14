@@ -35,7 +35,7 @@ func main() {
 	root.PersistentFlags().StringVar(&configPath, "config", "config.yaml", "path to config file")
 
 	root.AddCommand(
-		doctorCmd(), startCmd(), checkCmd(), solutionCmd(), solveCmd(), cleanupCmd(),
+		doctorCmd(), startCmd(), statusCmd(), checkCmd(), solutionCmd(), solveCmd(), cleanupCmd(),
 		resetCmd(), listCmd(), randomCmd(), drillCmd(), examCmd(),
 	)
 
@@ -292,17 +292,111 @@ func solveCmd() *cobra.Command {
 	}
 }
 
-func cleanupCmd() *cobra.Command {
+func statusCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "cleanup <scenario-id>",
-		Short: "Delete a scenario's namespace and tracked objects",
-		Args:  cobra.ExactArgs(1),
+		Use:   "status [scenario-id]",
+		Short: "List active scenarios, or re-show the task for one",
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			id := args[0]
+			if len(args) == 1 {
+				return showStatus(args[0])
+			}
+			return listActive()
+		},
+	}
+}
+
+func listActive() error {
+	insts, err := engine.LoadActiveInstances()
+	if err != nil {
+		return err
+	}
+	if len(insts) == 0 {
+		fmt.Println("no active scenarios")
+	} else {
+		fmt.Printf("%-26s %-36s %-14s %s\n", "SCENARIO", "NAMESPACE", "VARIANT", "AGE")
+		for _, in := range insts {
+			fmt.Printf("%-26s %-36s %-14s %s\n", in.ScenarioID, in.Namespace, orDash(in.Variant), ageOf(in.StartedAt))
+		}
+		fmt.Printf("\n%d active. `status <id>` re-shows a task; `check <id>` grades it.\n", len(insts))
+	}
+	if exam.InProgress() {
+		fmt.Println("\nan exam is in progress — see `ckad-trainer exam status`")
+	}
+	return nil
+}
+
+// showStatus re-renders the task for an active scenario (for when you've lost
+// track of what you were working on). It is read-only and never touches the cluster.
+func showStatus(id string) error {
+	_, scenarios, err := resolveCatalog()
+	if err != nil {
+		return err
+	}
+	inst, err := engine.LoadInstance(id)
+	if err != nil {
+		return err
+	}
+	s, err := scenario.Find(scenarios, id)
+	if err != nil {
+		return err
+	}
+	prompt, err := engine.RenderPrompt(s, inst)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("%s  [%s · %s]\n", bold(s.Title), s.Mode, s.Domain)
+	fmt.Printf("namespace: %s  %s  started %s ago\n\n",
+		inst.Namespace, dim(fmt.Sprintf("(seed %d)", inst.Seed)), ageOf(inst.StartedAt))
+	fmt.Println(prompt)
+	if len(s.Hints) > 0 {
+		fmt.Println("hints:")
+		for _, h := range s.Hints {
+			fmt.Printf("  - %s\n", h)
+		}
+	}
+	fmt.Printf("\ncheck:    ckad-trainer check %s\n", id)
+	fmt.Printf("cleanup:  ckad-trainer cleanup %s\n", id)
+	return nil
+}
+
+func orDash(s string) string {
+	if s == "" {
+		return "-"
+	}
+	return s
+}
+
+func ageOf(t time.Time) string {
+	d := time.Since(t)
+	switch {
+	case d < time.Minute:
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	case d < time.Hour:
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	default:
+		return fmt.Sprintf("%dh%dm", int(d.Hours()), int(d.Minutes())%60)
+	}
+}
+
+func cleanupCmd() *cobra.Command {
+	var all bool
+	cmd := &cobra.Command{
+		Use:   "cleanup [scenario-id]",
+		Short: "Delete a scenario's namespace and tracked objects (--all for every active one)",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.Load(configPath)
 			if err != nil {
 				return err
 			}
+			if all {
+				return cleanupAll(cfg)
+			}
+			if len(args) != 1 {
+				return fmt.Errorf("give a scenario id, or use --all")
+			}
+			id := args[0]
 			inst, err := engine.LoadInstance(id)
 			if err != nil {
 				return err
@@ -314,6 +408,36 @@ func cleanupCmd() *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().BoolVar(&all, "all", false, "clean up every active scenario (and end any exam)")
+	return cmd
+}
+
+func cleanupAll(cfg *config.Config) error {
+	insts, err := engine.LoadActiveInstances()
+	if err != nil {
+		return err
+	}
+	if len(insts) == 0 && !exam.InProgress() {
+		fmt.Println("nothing to clean up")
+		return nil
+	}
+	cleaned := 0
+	for _, in := range insts {
+		if err := engine.Cleanup(cfg, in); err != nil {
+			fmt.Printf("  %s %-26s %v\n", red("warn"), in.ScenarioID, err)
+			continue
+		}
+		fmt.Printf("  cleaned %-26s (namespace %s)\n", in.ScenarioID, in.Namespace)
+		cleaned++
+	}
+	if exam.InProgress() {
+		if err := exam.Clear(); err != nil {
+			return err
+		}
+		fmt.Println("  ended the exam session")
+	}
+	fmt.Printf("done: %d scenario(s) cleaned up\n", cleaned)
+	return nil
 }
 
 func listCmd() *cobra.Command {

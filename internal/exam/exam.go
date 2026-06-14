@@ -150,6 +150,21 @@ func sample(pool []scenario.Scenario, count int, rng *rand.Rand) []scenario.Scen
 	return out
 }
 
+// InProgress reports whether an exam session is active.
+func InProgress() bool {
+	_, err := os.Stat(sessionFile)
+	return err == nil
+}
+
+// Clear removes the exam session file (no-op if there is none). The task
+// resources are ordinary scenario instances, cleaned up separately.
+func Clear() error {
+	if err := os.Remove(sessionFile); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
+}
+
 // Load reads the active session, or an error if there is none.
 func Load() (*Session, error) {
 	raw, err := os.ReadFile(sessionFile)
