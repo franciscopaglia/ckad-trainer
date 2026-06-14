@@ -2,6 +2,8 @@
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](./LICENSE.md)
 
+<img width="1024" height="572" alt="banner" src="https://github.com/user-attachments/assets/034fe782-2102-4b45-b347-f56aa2f86d80" />
+
 A local, self-contained practice app for the **Certified Kubernetes Application
 Developer (CKAD)** exam. It runs hands-on scenarios against *your own* Kubernetes
 cluster: it sets up the starting state, gives you a task, checks your work with a
