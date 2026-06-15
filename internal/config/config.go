@@ -47,13 +47,17 @@ const (
 	ProviderKubeconfig = "kubeconfig"
 )
 
-// Load reads path, applies defaults, and validates. A missing file is an error
-// (callers should point the user at config.example.yaml).
+// ErrNotFound is returned by Load when the config file does not exist, so callers
+// can fall back to auto-detecting the current kube context.
+var ErrNotFound = errors.New("config file not found")
+
+// Load reads path, applies defaults, and validates. When the file is missing it
+// returns ErrNotFound (callers may then fall back to Default).
 func Load(path string) (*Config, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return nil, fmt.Errorf("config file %q not found: copy config.example.yaml to %q and edit it", path, path)
+			return nil, ErrNotFound
 		}
 		return nil, fmt.Errorf("reading config %q: %w", path, err)
 	}
@@ -68,6 +72,36 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("invalid config %q: %w", path, err)
 	}
 	return &c, nil
+}
+
+// Default builds a zero-config configuration that operates on the given kube
+// context. Used when there is no config file: the app simply uses whatever
+// context kubectl is currently pointed at, and pins the safety guard to it so it
+// only touches the cluster you're already on.
+func Default(context string) *Config {
+	var c Config
+	c.Cluster.Provider = ProviderKubeconfig
+	c.Cluster.Context = context
+	c.Safety.RequireContext = context
+	c.applyDefaults()
+	return &c
+}
+
+// Template renders a starter config.yaml pinned to the given context.
+func Template(context string) string {
+	return fmt.Sprintf(`cluster:
+  provider: kubeconfig
+  context: %s
+  kubectl: kubectl
+namespace_prefix: ckad
+defaults:
+  exam:
+    count: 16
+    minutes: 120
+safety:
+  require_context: %s
+# scenario_dir: ./scenarios   # uncomment to load scenarios from disk (authoring)
+`, context, context)
 }
 
 // applyDefaults fills in optional fields that were left empty.

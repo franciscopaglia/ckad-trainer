@@ -28,9 +28,14 @@ and put it on your `PATH` (see the [README](./README.md#install)), or build from
 source.
 
 ```bash
-cp config.example.yaml config.yaml     # then edit it (see §9)
-ckad-trainer doctor                     # verify kubectl, the context guard, reachability
+ckad-trainer init       # writes config.yaml from your current kube context
+ckad-trainer doctor     # verify kubectl, the context guard, reachability
 ```
+
+You don't *have* to run `init`: with no `config.yaml`, ckad-trainer falls back to
+whatever context `kubectl` is currently pointed at. `init` just pins that choice
+(see the box below). To target a different cluster: `ckad-trainer init --context
+<name>`, or edit `config.yaml` (§9).
 
 `doctor` must be green before anything else works. It checks that `kubectl` is
 present, that your current context matches the one you allow-listed
@@ -248,6 +253,7 @@ ckad-trainer exam abort
 
 | Command | What it does |
 |---------|--------------|
+| `init [--context <name>] [--force]` | Write `config.yaml` pinned to a kube context (default: current) |
 | `doctor` | Check kubectl, the safety context guard, and reachability |
 | `list` | List the scenario catalog (🎲 = randomized) |
 | `start <id> [--seed N] [--force]` | Set up a scenario and print the task |

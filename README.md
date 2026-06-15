@@ -93,7 +93,7 @@ macOS users: if Gatekeeper blocks the binary, clear the quarantine flag with
 ## Quickstart
 
 ```bash
-cp config.example.yaml config.yaml    # then edit: set your kube context
+ckad-trainer init                     # writes config.yaml from your current kube context
 ckad-trainer doctor                   # checks kubectl, the safety guard, reachability
 
 ckad-trainer start configmap-consume    # set up a task + print it
@@ -102,10 +102,12 @@ ckad-trainer check  configmap-consume   # PASS/FAIL table
 ckad-trainer cleanup configmap-consume  # tear it down
 ```
 
-> **Cluster:** any Kubernetes context works — set `provider: kubeconfig` and
-> `context` in `config.yaml`. minikube (`scripts/minikube-up.sh`), kind, or any
-> other local cluster is fine. The `require_context` guard keeps the app from
-> touching anything but the context you name.
+> **No setup needed:** with no `config.yaml`, ckad-trainer just uses whatever
+> context `kubectl` is currently pointed at. `init` simply writes that choice to
+> `config.yaml` and pins the safety guard to it, so a later `kubectl` context
+> switch can't make the app run somewhere you didn't expect. Target a different
+> cluster with `ckad-trainer init --context <name>`. Works with minikube
+> (`scripts/minikube-up.sh`), kind, or any other context.
 
 ---
 

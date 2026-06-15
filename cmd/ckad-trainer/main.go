@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Command ckad-trainer is a local CKAD practice runner. It sets up scenarios in
-// your cluster, checks your work, and cleans up. The reset/random/drill commands
-// and exam mode are not implemented yet (see stubCommands).
+// your cluster, checks your work, and cleans up — plus a timed, scored exam mode.
 package main
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"math/rand"
 	"os"
@@ -19,6 +19,7 @@ import (
 	"github.com/franciscopaglia/ckad-trainer/internal/config"
 	"github.com/franciscopaglia/ckad-trainer/internal/engine"
 	"github.com/franciscopaglia/ckad-trainer/internal/exam"
+	"github.com/franciscopaglia/ckad-trainer/internal/kubectl"
 	"github.com/franciscopaglia/ckad-trainer/internal/scenario"
 	"github.com/spf13/cobra"
 )
@@ -39,7 +40,7 @@ func main() {
 	root.PersistentFlags().StringVar(&configPath, "config", "config.yaml", "path to config file")
 
 	root.AddCommand(
-		doctorCmd(), startCmd(), statusCmd(), checkCmd(), solutionCmd(), solveCmd(), cleanupCmd(),
+		initCmd(), doctorCmd(), startCmd(), statusCmd(), checkCmd(), solutionCmd(), solveCmd(), cleanupCmd(),
 		resetCmd(), listCmd(), randomCmd(), drillCmd(), examCmd(),
 	)
 
@@ -58,9 +59,57 @@ func loadScenarios(cfg *config.Config) ([]scenario.Scenario, error) {
 	return scenario.LoadAll(catalog.FS())
 }
 
+// loadConfig loads config.yaml, or — when there is no config file — falls back to
+// the current kube context, so a freshly downloaded binary works with no setup.
+func loadConfig() (*config.Config, error) {
+	cfg, err := config.Load(configPath)
+	if err == nil {
+		return cfg, nil
+	}
+	if !errors.Is(err, config.ErrNotFound) {
+		return nil, err
+	}
+	cur, derr := kubectl.New("kubectl", "").CurrentContext()
+	if derr != nil || cur == "" {
+		return nil, fmt.Errorf("no %s, and no current kube context to fall back on.\n"+
+			"Point kubectl at a cluster (`kubectl config use-context <name>`), then run `ckad-trainer init`", configPath)
+	}
+	fmt.Fprintln(os.Stderr, dim(fmt.Sprintf("no %s — using current kube context %q (run `ckad-trainer init` to pin it)", configPath, cur)))
+	return config.Default(cur), nil
+}
+
+func initCmd() *cobra.Command {
+	var ctx string
+	var force bool
+	cmd := &cobra.Command{
+		Use:   "init",
+		Short: "Write a config.yaml pinned to your current kube context",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if _, err := os.Stat(configPath); err == nil && !force {
+				return fmt.Errorf("%s already exists (use --force to overwrite)", configPath)
+			}
+			if ctx == "" {
+				cur, err := kubectl.New("kubectl", "").CurrentContext()
+				if err != nil || cur == "" {
+					return fmt.Errorf("no current kube context; pass --context <name> or run `kubectl config use-context <name>` first")
+				}
+				ctx = cur
+			}
+			if err := os.WriteFile(configPath, []byte(config.Template(ctx)), 0o644); err != nil {
+				return err
+			}
+			fmt.Printf("wrote %s pinned to context %q\nnext: ckad-trainer doctor\n", configPath, ctx)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&ctx, "context", "", "kube context to pin (default: your current one)")
+	cmd.Flags().BoolVar(&force, "force", false, "overwrite an existing config")
+	return cmd
+}
+
 // resolveCatalog loads the config and the whole scenario catalog.
 func resolveCatalog() (*config.Config, []scenario.Scenario, error) {
-	cfg, err := config.Load(configPath)
+	cfg, err := loadConfig()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -94,7 +143,7 @@ func doctorCmd() *cobra.Command {
 		Use:   "doctor",
 		Short: "Check kubectl, the safety context guard, and cluster reachability",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.Load(configPath)
+			cfg, err := loadConfig()
 			if err != nil {
 				return err
 			}
@@ -390,7 +439,7 @@ func cleanupCmd() *cobra.Command {
 		Short: "Delete a scenario's namespace and tracked objects (--all for every active one)",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.Load(configPath)
+			cfg, err := loadConfig()
 			if err != nil {
 				return err
 			}
@@ -596,7 +645,7 @@ func examAbortCmd() *cobra.Command {
 		Use:   "abort",
 		Short: "End the exam without scoring and clean up its resources",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.Load(configPath)
+			cfg, err := loadConfig()
 			if err != nil {
 				return err
 			}

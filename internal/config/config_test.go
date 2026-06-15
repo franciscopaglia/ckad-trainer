@@ -4,10 +4,41 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 )
+
+func TestLoadMissingReturnsErrNotFound(t *testing.T) {
+	if _, err := Load(filepath.Join(t.TempDir(), "nope.yaml")); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("want ErrNotFound, got %v", err)
+	}
+}
+
+func TestDefaultIsValid(t *testing.T) {
+	c := Default("mctx")
+	if err := c.Validate(); err != nil {
+		t.Fatalf("Default() produced invalid config: %v", err)
+	}
+	if c.Cluster.Context != "mctx" || c.Safety.RequireContext != "mctx" {
+		t.Errorf("context/require_context not pinned to mctx: %+v", c.Cluster)
+	}
+	if c.Cluster.Provider != ProviderKubeconfig {
+		t.Errorf("provider = %q, want %q", c.Cluster.Provider, ProviderKubeconfig)
+	}
+}
+
+func TestTemplateLoadsBack(t *testing.T) {
+	p := writeTemp(t, Template("mctx"))
+	c, err := Load(p)
+	if err != nil {
+		t.Fatalf("Load(Template): %v", err)
+	}
+	if c.Cluster.Context != "mctx" || c.Safety.RequireContext != "mctx" {
+		t.Errorf("round-trip context wrong: %+v", c.Cluster)
+	}
+}
 
 func writeTemp(t *testing.T, body string) string {
 	t.Helper()
