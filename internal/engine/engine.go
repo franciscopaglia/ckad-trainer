@@ -27,7 +27,7 @@ import (
 	"github.com/franciscopaglia/ckad-trainer/internal/scenario"
 )
 
-// Label keys applied to everything the app creates (PLAN.md §4c).
+// Label keys applied to everything the app creates.
 const (
 	LabelManagedBy = "app.kubernetes.io/managed-by"
 	LabelScenario  = "ckad-trainer/scenario"

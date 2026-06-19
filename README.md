@@ -201,8 +201,12 @@ catalog.go               # go:embed of the scenarios/ directory
 scenarios/
   practice/<domain>/*.yaml   # hands-on scenarios (data, not code)
   flashcards/*.yaml          # kubectl command-format recall drills
-config.example.yaml      Makefile      PLAN.md      USAGE.md
+config.example.yaml      Makefile      USAGE.md
 ```
+
+> Engine internals and invariants are documented in
+> [`internal/engine/CLAUDE.md`](./internal/engine/CLAUDE.md); see also the root
+> [`CLAUDE.md`](./CLAUDE.md) for an orientation.
 
 ### Adding a scenario
 
@@ -213,13 +217,16 @@ objects) `cleanup`. Randomized scenarios add `params` and/or `variants`.
 
 While authoring, set `scenario_dir: ./scenarios` in `config.yaml` to load from
 disk instead of the embedded copy, then validate with `make test` and prove it
-solvable with `make smoke`. The full schema, with worked examples, is in
-[PLAN.md](./PLAN.md) (§5 and Appendix A).
+solvable with `make smoke`. The schema is the Go types in
+[`internal/scenario/scenario.go`](./internal/scenario/scenario.go) (each field
+is YAML-tagged and commented); the files under `scenarios/` are worked examples.
 
 ### Design
 
-[PLAN.md](./PLAN.md) is the design doc: architecture, the scenario schema, the
-randomization model, exam scoring, and the build history.
+The architecture, scenario schema, randomization model, and check semantics are
+documented next to the code: [`internal/engine/CLAUDE.md`](./internal/engine/CLAUDE.md)
+for the engine, package doc comments elsewhere, and the root
+[`CLAUDE.md`](./CLAUDE.md) for an orientation.
 
 ---
 

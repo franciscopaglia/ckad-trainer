@@ -4,7 +4,8 @@
 // Package scenario loads and validates scenario definition files.
 //
 // A scenario is one YAML file (data, never code). The engine is generic and is
-// driven entirely by these files. See PLAN.md §5 and Appendix A.
+// driven entirely by these files. The types below are the schema; the files
+// under scenarios/ are worked examples.
 package scenario
 
 import (
@@ -216,7 +217,7 @@ func (s *Scenario) normalize() {
 	}
 }
 
-// Validate enforces the rules in PLAN.md §4d. Randomization-specific render
+// Validate enforces the scenario schema rules. Randomization-specific render
 // checks across multiple seeds are added in Phase 4; here we parse-check
 // templates only.
 func (s Scenario) Validate() error {
