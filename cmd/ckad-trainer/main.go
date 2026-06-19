@@ -281,7 +281,7 @@ func checkCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			report, err := engine.Check(cfg, s, inst)
+			report, err := checkWithProgress(cfg, s, inst)
 			if err != nil {
 				return err
 			}
@@ -298,6 +298,31 @@ func checkCmd() *cobra.Command {
 			fmt.Printf("\n%s — keep going, then `check %s` again (or `solution %s`)\n", red("FAIL"), id, id)
 			return fmt.Errorf("scenario not yet passing")
 		},
+	}
+}
+
+// checkWithProgress runs engine.Check while printing a growing "checking…" line
+// to stderr, so the wait (some asserts poll for up to a minute while resources
+// settle — e.g. a Pod reaching Running) doesn't look like a hang.
+func checkWithProgress(cfg *config.Config, s scenario.Scenario, inst *engine.Instance) (engine.CheckReport, error) {
+	type res struct {
+		report engine.CheckReport
+		err    error
+	}
+	ch := make(chan res, 1)
+	go func() { r, e := engine.Check(cfg, s, inst); ch <- res{r, e} }()
+
+	fmt.Fprint(os.Stderr, dim("checking…"))
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case r := <-ch:
+			fmt.Fprintln(os.Stderr)
+			return r.report, r.err
+		case <-ticker.C:
+			fmt.Fprint(os.Stderr, dim("."))
+		}
 	}
 }
 

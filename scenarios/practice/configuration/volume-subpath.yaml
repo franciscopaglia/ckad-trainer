@@ -38,12 +38,12 @@ verify:
   - kind: Pod
     name: "{{.podName}}"
     assert:
-      - path: "{.spec.volumes[0].configMap.name}"
-        equals: "{{.cmName}}"
-      - path: "{.spec.containers[0].volumeMounts[0].mountPath}"
-        equals: "/etc/config/{{.fileKey}}"
-      - path: "{.spec.containers[0].volumeMounts[0].subPath}"
-        equals: "{{.fileKey}}"
+      - path: "{.spec.volumes[*].configMap.name}"
+        contains: "{{.cmName}}"
+      - path: "{.spec.containers[0].volumeMounts[*].mountPath}"
+        contains: "/etc/config/{{.fileKey}}"
+      - path: "{.spec.containers[0].volumeMounts[*].subPath}"
+        contains: "{{.fileKey}}"
 
 solution:
   description: |

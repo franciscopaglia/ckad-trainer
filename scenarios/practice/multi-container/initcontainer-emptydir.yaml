@@ -25,11 +25,13 @@ verify:
     assert:
       - path: "{.spec.initContainers[0].name}"
         equals: "init"
-      - path: "{.spec.initContainers[0].volumeMounts[0].mountPath}"
-        equals: "/work"
-      - path: "{.spec.containers[0].volumeMounts[0].mountPath}"
-        equals: "/work"
-      - path: "{.spec.volumes[0].emptyDir}"
+      # volumeMounts[*], not [0]: Kubernetes injects the ServiceAccount token
+      # mount, which can shift the index, so match by the mount path instead.
+      - path: "{.spec.initContainers[0].volumeMounts[*].mountPath}"
+        contains: "/work"
+      - path: "{.spec.containers[0].volumeMounts[*].mountPath}"
+        contains: "/work"
+      - path: "{.spec.volumes[*].emptyDir}"
         exists: true
       - path: "{.status.phase}"
         equals: "Running"

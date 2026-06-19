@@ -38,10 +38,10 @@ verify:
   - kind: Pod
     name: app
     assert:
-      - path: "{.spec.volumes[0].persistentVolumeClaim.claimName}"
-        equals: "{{.pvcName}}"
-      - path: "{.spec.containers[0].volumeMounts[0].mountPath}"
-        equals: "/data"
+      - path: "{.spec.volumes[*].persistentVolumeClaim.claimName}"
+        contains: "{{.pvcName}}"
+      - path: "{.spec.containers[0].volumeMounts[*].mountPath}"
+        contains: "/data"
 
 solution:
   description: |

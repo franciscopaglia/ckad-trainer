@@ -31,12 +31,14 @@ verify:
         contains: "app"
       - path: "{.spec.containers[*].name}"
         contains: "sidecar"
-      - path: "{.spec.volumes[0].emptyDir}"
+      - path: "{.spec.volumes[*].emptyDir}"
         exists: true
-      - path: '{.spec.containers[?(@.name=="app")].volumeMounts[0].mountPath}'
-        equals: "{{.mountPath}}"
-      - path: '{.spec.containers[?(@.name=="sidecar")].volumeMounts[0].mountPath}'
-        equals: "{{.mountPath}}"
+      # Match the mount by path (volumeMounts[*]); the injected ServiceAccount
+      # token mount can occupy index 0.
+      - path: '{.spec.containers[?(@.name=="app")].volumeMounts[*].mountPath}'
+        contains: "{{.mountPath}}"
+      - path: '{.spec.containers[?(@.name=="sidecar")].volumeMounts[*].mountPath}'
+        contains: "{{.mountPath}}"
 
 solution:
   description: |

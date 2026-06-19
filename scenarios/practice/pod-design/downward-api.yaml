@@ -37,10 +37,10 @@ variants:
       - kind: Pod
         name: "{{.podName}}"
         assert:
-          - path: "{.spec.volumes[0].downwardAPI.items[0].fieldRef.fieldPath}"
-            equals: "metadata.name"
-          - path: "{.spec.volumes[0].downwardAPI.items[0].path}"
-            equals: "name"
+          - path: "{.spec.volumes[*].downwardAPI.items[*].fieldRef.fieldPath}"
+            contains: "metadata.name"
+          - path: "{.spec.volumes[*].downwardAPI.items[*].path}"
+            contains: "name"
           - path: '{.spec.containers[0].volumeMounts[?(@.mountPath=="/podinfo")].name}'
             exists: true
 

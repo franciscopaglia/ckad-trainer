@@ -34,12 +34,12 @@ verify:
   - kind: Pod
     name: reader
     assert:
-      - path: "{.spec.volumes[0].configMap.name}"
-        equals: "app-config"
-      - path: "{.spec.volumes[0].configMap.items[0].key}"
-        equals: "app.properties"
-      - path: "{.spec.volumes[0].configMap.items[0].path}"
-        equals: "application.properties"
+      - path: "{.spec.volumes[*].configMap.name}"
+        contains: "app-config"
+      - path: "{.spec.volumes[*].configMap.items[*].key}"
+        contains: "app.properties"
+      - path: "{.spec.volumes[*].configMap.items[*].path}"
+        contains: "application.properties"
       - path: '{.spec.containers[0].volumeMounts[?(@.mountPath=="/config")].name}'
         exists: true
 

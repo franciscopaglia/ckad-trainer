@@ -34,7 +34,7 @@ verify:
         equals: "Always"
       - path: "{.spec.containers[0].name}"
         equals: "app"
-      - path: "{.spec.volumes[0].emptyDir}"
+      - path: "{.spec.volumes[*].emptyDir}"
         exists: true
       - path: "{.status.phase}"
         equals: "Running"
