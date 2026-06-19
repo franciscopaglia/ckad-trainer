@@ -1,0 +1,14 @@
+id: fc-image-build
+title: "build and tag a container image"
+mode: flashcard
+domain: core-concepts
+references:
+  - https://docs.docker.com/reference/cli/docker/buildx/build/
+
+prompt: |
+  From a directory containing a `Dockerfile`, build an image and tag it
+  `registry.example.com/app:v1`, then push it. (Podman is drop-in: swap
+  `docker` for `podman`.)
+solution:
+  commands:
+    - "docker build -t registry.example.com/app:v1 . && docker push registry.example.com/app:v1"

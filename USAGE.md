@@ -3,6 +3,13 @@
 A complete guide to practising with `ckad-trainer`. If you just want to build it
 and start hacking on the code, see the [README](./README.md).
 
+> **Disclaimer:** independent study aid, not affiliated with or endorsed by The
+> Linux Foundation or CNCF. It contains **no real exam questions** — every
+> scenario is original, based on the public [CKAD curriculum](https://github.com/cncf/curriculum)
+> and community exam testimonials, and may not match the live exam in content or
+> difficulty. See the README [Disclaimer](./README.md#disclaimer) for the full
+> note and trademark attribution.
+
 ## Table of contents
 
 - [1. Install and set up](#1-install-and-set-up)
@@ -33,9 +40,12 @@ ckad-trainer doctor     # verify kubectl, the context guard, reachability
 ```
 
 You don't *have* to run `init`: with no `config.yaml`, ckad-trainer falls back to
-whatever context `kubectl` is currently pointed at. `init` just pins that choice
-(see the box below). To target a different cluster: `ckad-trainer init --context
-<name>`, or edit `config.yaml` (§9).
+whatever context `kubectl` is currently pointed at. Note that without a config
+there's no pinned context, so the safety guard is inactive — the app follows your
+current context each time, so a `kubectl` context switch mid-session can land
+`cleanup`/`check` on a different cluster. `init` pins that choice (see the box
+below). To target a different cluster: `ckad-trainer init --context <name>`, or
+edit `config.yaml` (§9).
 
 `doctor` must be green before anything else works. It checks that `kubectl` is
 present, that your current context matches the one you allow-listed
@@ -270,7 +280,9 @@ ckad-trainer exam abort
 | `exam grade` | Score, per-domain breakdown, and clean up |
 | `exam abort` | End the exam without scoring |
 
-Global flag: `--config <path>` (default `config.yaml`). Color output turns off
+Global flag: `--config <path>`. With no flag the config is found at
+`./config.yaml` if present, otherwise the per-user
+`$XDG_CONFIG_HOME/ckad-trainer/config.yaml`. Color output turns off
 automatically when piped or when `NO_COLOR` is set.
 
 ---
@@ -301,22 +313,25 @@ safety:
   current context matches it. Keep it pointed at a throwaway cluster.
 - `scenario_dir` is only for authoring (see the README); leave it commented to
   use the catalog baked into the binary.
+- Active-scenario and exam state are kept under `$XDG_STATE_HOME/ckad-trainer`
+  (default `~/.local/state/ckad-trainer`; override with `CKAD_TRAINER_STATE`), so
+  `status`/`check`/`cleanup` find your work regardless of the current directory.
 
 ---
 
 ## 10. Scenario catalog
 
-51 scenarios — 41 hands-on (most randomized) plus 10 kubectl flashcards — mapped
-to the 2026 CKAD domains:
+70 scenarios — 47 hands-on (most randomized) plus 23 kubectl/helm flashcards —
+mapped to the 2026 CKAD domains:
 
 | Domain (weight) | Covered |
 |-----------------|---------|
-| **App Environment, Config & Security** (25%) | ConfigMaps (`envFrom`/keyRef/volume/`items`/immutable/subPath), Secrets (env/volume/docker-registry), resource requests/limits, ResourceQuota, LimitRange, securityContext, ServiceAccount, RBAC, PV→PVC→Pod |
-| **Application Design & Build** (20%) | multi-container + init + native sidecar (emptyDir), Jobs (fields, Indexed/TTL), CronJob, command/args, downward API, PriorityClass, node scheduling (nodeSelector/tolerations) |
-| **Application Deployment** (20%) | Deployments + scale, rollout undo/pause, update strategies, canary, blue/green, HPA |
-| **Services & Networking** (20%) | Service ClusterIP/NodePort, endpoints debugging, NetworkPolicy ingress/egress, Ingress routing |
+| **App Environment, Config & Security** (25%) | ConfigMaps (`envFrom`/keyRef/volume/`items`/immutable/subPath), Secrets (env/volume/docker-registry), resource requests/limits, ResourceQuota, LimitRange, securityContext (runAsUser/Group, fsGroup, caps add/drop, readOnlyRootFS), ServiceAccount, RBAC (Role + ClusterRole, RoleBinding/ClusterRoleBinding, `auth can-i`), static PV→PVC→Pod, dynamic PVC provisioning |
+| **Application Design & Build** (20%) | multi-container + init + native sidecar + ambassador proxy (emptyDir/localhost), Jobs (fields, Indexed/TTL), CronJob, command/args, downward API, PriorityClass, node scheduling (nodeSelector/tolerations) |
+| **Application Deployment** (20%) | Deployments + scale, `set image` rollouts, rollout undo/pause, update strategies, canary, blue/green, HPA |
+| **Services & Networking** (20%) | Service ClusterIP/NodePort, endpoints debugging, NetworkPolicy ingress/egress, Ingress routing + TLS termination |
 | **Observability & Maintenance** (15%) | liveness/readiness/startup probes, fix-a-broken-probe, ephemeral debug containers |
-| **Flashcards** | jsonpath, `--sort-by`, custom-columns, field selectors, `wait --for`, set-based selectors, TLS secret, create token, rollout restart, debug syntax |
+| **Flashcards** | context switch + default namespace (`config use-context`/`set-context`), jsonpath, `--sort-by`, custom-columns, field selectors, `wait --for`, set-based selectors, TLS secret, create token, `auth can-i`, rollout restart, debug syntax, logs (`--previous`), `top`, events `--sort-by`, api-versions/deprecations, image build, Helm (install/upgrade/pull), Kustomize, CRD discovery |
 
 `ckad-trainer list` shows them all; `ckad-trainer random --domain <slug>` filters
 by the fine-grained slugs (`configuration`, `core-concepts`, `multi-container`,

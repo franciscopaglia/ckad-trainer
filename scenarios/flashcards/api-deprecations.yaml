@@ -1,0 +1,14 @@
+id: fc-api-deprecations
+title: "find the current API version for a resource"
+mode: flashcard
+domain: observability
+references:
+  - https://kubernetes.io/docs/reference/using-api/deprecation-guide/
+
+prompt: |
+  A manifest uses a deprecated `apiVersion`. List every API group/version the
+  cluster currently serves so you can pick the non-deprecated one. (Confirm a
+  resource's group with `kubectl explain <kind>`.)
+solution:
+  commands:
+    - "kubectl api-versions"

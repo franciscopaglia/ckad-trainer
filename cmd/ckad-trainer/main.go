@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -20,6 +21,7 @@ import (
 	"github.com/franciscopaglia/ckad-trainer/internal/engine"
 	"github.com/franciscopaglia/ckad-trainer/internal/exam"
 	"github.com/franciscopaglia/ckad-trainer/internal/kubectl"
+	"github.com/franciscopaglia/ckad-trainer/internal/paths"
 	"github.com/franciscopaglia/ckad-trainer/internal/scenario"
 	"github.com/spf13/cobra"
 )
@@ -37,7 +39,8 @@ func main() {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
-	root.PersistentFlags().StringVar(&configPath, "config", "config.yaml", "path to config file")
+	root.PersistentFlags().StringVar(&configPath, "config", "",
+		"path to config file (default: ./config.yaml, else $XDG_CONFIG_HOME/ckad-trainer/config.yaml)")
 
 	root.AddCommand(
 		initCmd(), doctorCmd(), startCmd(), statusCmd(), checkCmd(), solutionCmd(), solveCmd(), cleanupCmd(),
@@ -59,10 +62,12 @@ func loadScenarios(cfg *config.Config) ([]scenario.Scenario, error) {
 	return scenario.LoadAll(catalog.FS())
 }
 
-// loadConfig loads config.yaml, or — when there is no config file — falls back to
-// the current kube context, so a freshly downloaded binary works with no setup.
+// loadConfig loads the config file (resolved from --config, ./config.yaml, or the
+// per-user XDG path), or — when there is none — falls back to the current kube
+// context, so a freshly downloaded binary works with no setup.
 func loadConfig() (*config.Config, error) {
-	cfg, err := config.Load(configPath)
+	path := paths.ResolveConfig(configPath)
+	cfg, err := config.Load(path)
 	if err == nil {
 		return cfg, nil
 	}
@@ -71,10 +76,10 @@ func loadConfig() (*config.Config, error) {
 	}
 	cur, derr := kubectl.New("kubectl", "").CurrentContext()
 	if derr != nil || cur == "" {
-		return nil, fmt.Errorf("no %s, and no current kube context to fall back on.\n"+
-			"Point kubectl at a cluster (`kubectl config use-context <name>`), then run `ckad-trainer init`", configPath)
+		return nil, fmt.Errorf("no config file, and no current kube context to fall back on.\n" +
+			"Point kubectl at a cluster (`kubectl config use-context <name>`), then run `ckad-trainer init`")
 	}
-	fmt.Fprintln(os.Stderr, dim(fmt.Sprintf("no %s — using current kube context %q (run `ckad-trainer init` to pin it)", configPath, cur)))
+	fmt.Fprintln(os.Stderr, dim(fmt.Sprintf("no config file — using current kube context %q (run `ckad-trainer init` to pin it)", cur)))
 	return config.Default(cur), nil
 }
 
@@ -83,10 +88,15 @@ func initCmd() *cobra.Command {
 	var force bool
 	cmd := &cobra.Command{
 		Use:   "init",
-		Short: "Write a config.yaml pinned to your current kube context",
+		Short: "Write a config file pinned to your current kube context",
+		Long: "Write a config file pinned to your current kube context.\n\n" +
+			"By default it writes the per-user config ($XDG_CONFIG_HOME/ckad-trainer/config.yaml),\n" +
+			"so an installed binary works from any directory. If a ./config.yaml already exists it\n" +
+			"updates that instead; --config picks an explicit path.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if _, err := os.Stat(configPath); err == nil && !force {
-				return fmt.Errorf("%s already exists (use --force to overwrite)", configPath)
+			dest := paths.ResolveConfig(configPath)
+			if _, err := os.Stat(dest); err == nil && !force {
+				return fmt.Errorf("%s already exists (use --force to overwrite)", dest)
 			}
 			if ctx == "" {
 				cur, err := kubectl.New("kubectl", "").CurrentContext()
@@ -95,10 +105,13 @@ func initCmd() *cobra.Command {
 				}
 				ctx = cur
 			}
-			if err := os.WriteFile(configPath, []byte(config.Template(ctx)), 0o644); err != nil {
+			if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 				return err
 			}
-			fmt.Printf("wrote %s pinned to context %q\nnext: ckad-trainer doctor\n", configPath, ctx)
+			if err := os.WriteFile(dest, []byte(config.Template(ctx)), 0o644); err != nil {
+				return err
+			}
+			fmt.Printf("wrote %s pinned to context %q\nnext: ckad-trainer doctor\n", dest, ctx)
 			return nil
 		},
 	}

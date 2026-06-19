@@ -1,0 +1,13 @@
+id: fc-context-namespace
+title: "set the default namespace for your context"
+mode: flashcard
+domain: core-concepts
+references:
+  - https://kubernetes.io/docs/reference/kubectl/generated/kubectl_config/kubectl_config_set-context/
+
+prompt: |
+  You're working entirely in namespace `dev` and tired of typing `-n dev`. Make
+  it the default for the current context so bare `kubectl` commands target it.
+solution:
+  commands:
+    - "kubectl config set-context --current --namespace=dev"

@@ -1,0 +1,62 @@
+id: ambassador-proxy
+title: "Ambassador pattern: proxy sidecar on localhost"
+mode: practice
+domain: multi-container
+weight: 1
+estimated_minutes: 5
+randomize: true
+references:
+  - https://kubernetes.io/docs/concepts/workloads/pods/#how-pods-manage-multiple-containers
+
+params:
+  podName: { pick: [client, frontend, worker] }
+  proxyPort: { pick: ["80", "8080"] }
+
+prompt: |
+  In `{{.ns}}`, build a Pod `{{.podName}}` that uses the **ambassador pattern**:
+  a main container `app` (image `busybox:1.36`, running `sleep 3600`) that reaches
+  the outside world over `localhost`, plus an `ambassador` container (image
+  `nginx:1.27`) acting as the proxy, listening on container port `{{.proxyPort}}`.
+  Because both containers share the Pod's network namespace, `app` talks to the
+  proxy at `127.0.0.1:{{.proxyPort}}`. The Pod must reach **Running**.
+
+hints:
+  - "Two containers in one Pod share localhost — no Service needed between them."
+  - "Order matters for the check: list `app` first, then `ambassador`."
+
+verify:
+  - kind: Pod
+    name: "{{.podName}}"
+    assert:
+      - path: "{.spec.containers[0].name}"
+        equals: "app"
+      - path: "{.spec.containers[1].name}"
+        equals: "ambassador"
+      - path: "{.spec.containers[1].ports[0].containerPort}"
+        equals: "{{.proxyPort}}"
+      - path: "{.status.phase}"
+        equals: "Running"
+        wait: "60s"
+
+solution:
+  description: |
+    In the ambassador pattern a proxy container in the same Pod fronts the
+    application's outbound connections, so the app only ever talks to localhost
+    and stays oblivious to the real backend. The containers share the Pod's
+    network namespace, which is why 127.0.0.1 reaches the proxy.
+  manifests:
+    - |
+      apiVersion: v1
+      kind: Pod
+      metadata:
+        name: {{.podName}}
+        namespace: {{.ns}}
+      spec:
+        containers:
+          - name: app
+            image: busybox:1.36
+            command: ["sh", "-c", "sleep 3600"]
+          - name: ambassador
+            image: nginx:1.27
+            ports:
+              - containerPort: {{.proxyPort}}

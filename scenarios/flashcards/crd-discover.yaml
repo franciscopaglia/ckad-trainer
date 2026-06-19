@@ -1,0 +1,14 @@
+id: fc-crd-discover
+title: "discover CRDs and extension resources"
+mode: flashcard
+domain: configuration
+references:
+  - https://kubernetes.io/docs/tasks/extend-kubernetes/custom-resources/custom-resource-definitions/
+
+prompt: |
+  An operator installed custom resources. List every CustomResourceDefinition
+  registered in the cluster. (Then `kubectl api-resources` shows their short
+  names/kinds, and `kubectl explain <kind>` documents their fields.)
+solution:
+  commands:
+    - "kubectl get crd"

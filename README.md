@@ -11,7 +11,7 @@ per-assertion **PASS/FAIL** table, and cleans up after itself.
 
 Built to grind the muscle memory the exam actually tests — imperative commands,
 specific API fields, and "modify this existing object" tasks under time pressure.
-**51 scenarios** (41 hands-on, most randomized, + 10 kubectl flashcards) across
+**70 scenarios** (47 hands-on, most randomized, + 23 kubectl/helm flashcards) across
 all CKAD domains, in both a practice mode and a timed, scored exam mode.
 
 ## Table of contents
@@ -28,6 +28,7 @@ all CKAD domains, in both a practice mode and a timed, scored exam mode.
   - [Adding a scenario](#adding-a-scenario)
   - [Design](#design)
 - [Configuration](#configuration)
+- [Disclaimer](#disclaimer)
 - [License](#license)
 
 ---
@@ -85,8 +86,26 @@ Pick the asset that matches your machine:
 | macOS Apple Silicon | `ckad-trainer-darwin-arm64` |
 | Windows x86_64 | `ckad-trainer-windows-amd64.exe` |
 
+Each release ships a `SHA256SUMS` file. To verify your download:
+
+```bash
+curl -fsSLO https://github.com/franciscopaglia/ckad-trainer/releases/latest/download/SHA256SUMS
+sha256sum -c SHA256SUMS --ignore-missing      # expect "<asset>: OK"
+```
+
 macOS users: if Gatekeeper blocks the binary, clear the quarantine flag with
 `xattr -d com.apple.quarantine ckad-trainer`. Or [build from source](#build-and-install).
+
+**With the Go toolchain** you can skip the download entirely:
+
+```bash
+go install github.com/franciscopaglia/ckad-trainer/cmd/ckad-trainer@latest
+```
+
+This drops `ckad-trainer` in `$(go env GOPATH)/bin`. The catalog is embedded, so
+the binary is self-contained; it stores config and progress under
+`$XDG_CONFIG_HOME` / `$XDG_STATE_HOME` (see [Configuration](#configuration)), so
+it works from any directory.
 
 ---
 
@@ -103,7 +122,9 @@ ckad-trainer cleanup configmap-consume  # tear it down
 ```
 
 > **No setup needed:** with no `config.yaml`, ckad-trainer just uses whatever
-> context `kubectl` is currently pointed at. `init` simply writes that choice to
+> context `kubectl` is currently pointed at. Until you run `init` there's no
+> pinned context, so the safety guard is inactive — the app follows your current
+> context each time, command to command. `init` writes that choice to
 > `config.yaml` and pins the safety guard to it, so a later `kubectl` context
 > switch can't make the app run somewhere you didn't expect. Target a different
 > cluster with `ckad-trainer init --context <name>`. Works with minikube
@@ -204,9 +225,20 @@ randomization model, exam scoring, and the build history.
 
 ## Configuration
 
-A single `config.yaml` (copy `config.example.yaml`). The `safety.require_context`
-guard refuses to run unless your current kube context matches it, so the app
-never touches a real cluster by accident.
+A single `config.yaml`. `ckad-trainer init` writes it for you (pinned to your
+current context); the file is resolved in this order:
+
+1. `--config <path>`, if given;
+2. `./config.yaml` in the working directory (handy for development/authoring);
+3. the per-user file `$XDG_CONFIG_HOME/ckad-trainer/config.yaml` (default
+   `~/.config/ckad-trainer/config.yaml`).
+
+Active-scenario and exam state live under `$XDG_STATE_HOME/ckad-trainer`
+(default `~/.local/state/ckad-trainer`; override with `CKAD_TRAINER_STATE`), so
+the installed binary tracks your progress the same from any directory.
+
+The `safety.require_context` guard refuses to run unless your current kube
+context matches it, so the app never touches a real cluster by accident.
 
 ```yaml
 cluster:
@@ -221,6 +253,29 @@ safety:
 ```
 
 Full field-by-field reference in the [Usage guide](./USAGE.md#9-configuration).
+
+---
+
+## Disclaimer
+
+**Independent project — not affiliated with, authorized by, or endorsed by The
+Linux Foundation or the Cloud Native Computing Foundation (CNCF).** This is a
+free, community-built study aid for the CKAD exam, not part of the official
+certification program.
+
+**No real exam questions.** This repository contains **no actual CKAD exam
+content**. Every scenario and flashcard is original, written from the publicly
+published [CKAD curriculum](https://github.com/cncf/curriculum) and from
+community blog posts, write-ups, and exam testimonials describing the *kinds* of
+tasks the exam covers. Nothing here reproduces confidential exam material, so
+using it does not violate the Linux Foundation's exam confidentiality agreement.
+The scenarios reflect those public sources and may not match the current exam in
+content, format, or difficulty — no passing guarantee is implied.
+
+**Trademarks.** "CKAD", "Certified Kubernetes Application Developer",
+"Kubernetes", and "CNCF" are trademarks of The Linux Foundation / Cloud Native
+Computing Foundation. They are used here only descriptively, to identify the exam
+this tool helps you prepare *for*, and their use does not imply any endorsement.
 
 ---
 

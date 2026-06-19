@@ -1,0 +1,13 @@
+id: fc-events-sorted
+title: "events in chronological order"
+mode: flashcard
+domain: observability
+references:
+  - https://kubernetes.io/docs/reference/kubectl/generated/kubectl_get/
+
+prompt: |
+  Show the events in namespace `prod` sorted by when they last happened, so the
+  most recent are at the bottom. (Newer kubectl: `kubectl events --for pod/api`.)
+solution:
+  commands:
+    - "kubectl get events -n prod --sort-by=.lastTimestamp"

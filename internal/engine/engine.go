@@ -23,6 +23,7 @@ import (
 	"github.com/franciscopaglia/ckad-trainer/internal/cluster"
 	"github.com/franciscopaglia/ckad-trainer/internal/config"
 	"github.com/franciscopaglia/ckad-trainer/internal/kubectl"
+	"github.com/franciscopaglia/ckad-trainer/internal/paths"
 	"github.com/franciscopaglia/ckad-trainer/internal/scenario"
 )
 
@@ -34,8 +35,9 @@ const (
 	ManagedByValue = "ckad-trainer"
 )
 
-// stateDir holds one JSON file per active scenario.
-const stateDir = "state"
+// stateDir holds one JSON file per active scenario. It resolves to a stable
+// per-user location (see internal/paths) so the binary works from any directory.
+func stateDir() string { return paths.StateDir() }
 
 // ErrAlreadyStarted is returned by Start when a scenario already has live state.
 var ErrAlreadyStarted = errors.New("scenario already started (use --force to restart)")
@@ -208,7 +210,7 @@ func LoadInstance(id string) (*Instance, error) {
 // LoadActiveInstances returns the instances of all currently-started scenarios,
 // oldest first. The exam session file is not a scenario and is skipped.
 func LoadActiveInstances() ([]*Instance, error) {
-	entries, err := os.ReadDir(stateDir)
+	entries, err := os.ReadDir(stateDir())
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, nil
@@ -251,10 +253,10 @@ func (inst *Instance) data() map[string]any {
 	return d
 }
 
-func statePath(id string) string { return filepath.Join(stateDir, id+".json") }
+func statePath(id string) string { return filepath.Join(stateDir(), id+".json") }
 
 func writeState(inst *Instance) error {
-	if err := os.MkdirAll(stateDir, 0o755); err != nil {
+	if err := os.MkdirAll(stateDir(), 0o755); err != nil {
 		return err
 	}
 	raw, err := json.MarshalIndent(inst, "", "  ")

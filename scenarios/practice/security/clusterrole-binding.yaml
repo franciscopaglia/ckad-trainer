@@ -1,0 +1,139 @@
+id: clusterrole-binding
+title: "Grant access with a ClusterRole"
+mode: practice
+domain: security
+weight: 1
+estimated_minutes: 6
+randomize: true
+references:
+  - https://kubernetes.io/docs/reference/access-authn-authz/rbac/#role-and-clusterrole
+
+params:
+  saName: { pick: [viewer, app-sa, monitor] }
+  crName: { pattern: "cr-{{randInt 1000 9999}}" }
+  crbName: { pattern: "crb-{{randInt 1000 9999}}" }
+  bindName: { pick: [read-binding, grant-read, ns-view] }
+  resource: { pick: [pods, configmaps, services] }
+
+# The ServiceAccount already exists; the task wires up a ClusterRole-based grant.
+setup:
+  manifests:
+    - |
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: {{.saName}}
+        namespace: {{.ns}}
+
+variants:
+  # Reuse a ClusterRole inside ONE namespace via a RoleBinding (the common case:
+  # define the permissions once cluster-wide, grant them per-namespace).
+  - name: namespaced
+    weight: 2
+    prompt: |
+      In `{{.ns}}`:
+      1. Create a **ClusterRole** `{{.crName}}` allowing `get`, `list`, `watch`
+         on `{{.resource}}` (core API group).
+      2. Create a **RoleBinding** `{{.bindName}}` in `{{.ns}}` that grants that
+         ClusterRole to ServiceAccount `{{.saName}}` — note `roleRef.kind` is
+         `ClusterRole`, but the binding (and thus the grant) is namespaced.
+    verify:
+      - kind: ClusterRole
+        name: "{{.crName}}"
+        cluster_scoped: true
+        assert:
+          - path: "{.rules[0].resources[*]}"
+            contains: "{{.resource}}"
+          - path: "{.rules[0].verbs[*]}"
+            contains: "list"
+      - kind: RoleBinding
+        name: "{{.bindName}}"
+        assert:
+          - path: "{.roleRef.kind}"
+            equals: "ClusterRole"
+          - path: "{.roleRef.name}"
+            equals: "{{.crName}}"
+          - path: "{.subjects[0].name}"
+            equals: "{{.saName}}"
+
+  # Grant the same permissions cluster-wide with a ClusterRoleBinding.
+  - name: clusterwide
+    weight: 1
+    prompt: |
+      Create a **ClusterRole** `{{.crName}}` allowing `get`, `list`, `watch` on
+      `{{.resource}}` (core API group), then a **ClusterRoleBinding** `{{.crbName}}`
+      that grants it cluster-wide to ServiceAccount `{{.saName}}` (in `{{.ns}}`).
+    verify:
+      - kind: ClusterRole
+        name: "{{.crName}}"
+        cluster_scoped: true
+        assert:
+          - path: "{.rules[0].resources[*]}"
+            contains: "{{.resource}}"
+          - path: "{.rules[0].verbs[*]}"
+            contains: "list"
+      - kind: ClusterRoleBinding
+        name: "{{.crbName}}"
+        cluster_scoped: true
+        assert:
+          - path: "{.roleRef.name}"
+            equals: "{{.crName}}"
+          - path: "{.subjects[0].kind}"
+            equals: "ServiceAccount"
+          - path: "{.subjects[0].name}"
+            equals: "{{.saName}}"
+          - path: "{.subjects[0].namespace}"
+            equals: "{{.ns}}"
+
+cleanup:
+  cluster_scoped:
+    - kind: ClusterRole
+      name: "{{.crName}}"
+    - kind: ClusterRoleBinding
+      name: "{{.crbName}}"
+
+solution:
+  description: |
+    A ClusterRole is a cluster-scoped set of permissions. Bind it with a
+    RoleBinding (roleRef.kind: ClusterRole) to scope the grant to one namespace,
+    or with a ClusterRoleBinding to grant it cluster-wide. Verify with
+    `kubectl auth can-i list {{.resource}} --as=system:serviceaccount:{{.ns}}:{{.saName}} -n {{.ns}}`.
+  manifests:
+    - |
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRole
+      metadata:
+        name: {{.crName}}
+      rules:
+        - apiGroups: [""]
+          resources: ["{{.resource}}"]
+          verbs: ["get", "list", "watch"]
+    - |
+      {{- if eq .variant "namespaced"}}
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: RoleBinding
+      metadata:
+        name: {{.bindName}}
+        namespace: {{.ns}}
+      roleRef:
+        apiGroup: rbac.authorization.k8s.io
+        kind: ClusterRole
+        name: {{.crName}}
+      subjects:
+        - kind: ServiceAccount
+          name: {{.saName}}
+          namespace: {{.ns}}
+      {{- else}}
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRoleBinding
+      metadata:
+        name: {{.crbName}}
+      roleRef:
+        apiGroup: rbac.authorization.k8s.io
+        kind: ClusterRole
+        name: {{.crName}}
+      subjects:
+        - kind: ServiceAccount
+          name: {{.saName}}
+          namespace: {{.ns}}
+      {{- end}}

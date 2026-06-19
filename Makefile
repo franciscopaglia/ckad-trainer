@@ -12,7 +12,7 @@ all: check build
 build: ## Build the binary (embeds the scenario catalog)
 	go build -ldflags "$(LDFLAGS)" -o $(BINARY) $(PKG)
 
-dist: ## Cross-compile release binaries into dist/ (set VERSION=vX.Y.Z)
+dist: ## Cross-compile release binaries + checksums into dist/ (set VERSION=vX.Y.Z)
 	@rm -rf dist && mkdir -p dist
 	@for p in $(PLATFORMS); do \
 		os=$${p%/*}; arch=$${p#*/}; out=dist/$(BINARY)-$$os-$$arch; \
@@ -20,6 +20,7 @@ dist: ## Cross-compile release binaries into dist/ (set VERSION=vX.Y.Z)
 		echo "  $$out"; \
 		GOOS=$$os GOARCH=$$arch CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o $$out $(PKG) || exit 1; \
 	done
+	@cd dist && sha256sum $(BINARY)-* > SHA256SUMS && echo "  dist/SHA256SUMS"
 
 install: build ## Install the binary to $(PREFIX)/bin
 	install -m 0755 $(BINARY) $(PREFIX)/bin/$(BINARY)

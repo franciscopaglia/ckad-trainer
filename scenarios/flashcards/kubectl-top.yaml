@@ -1,0 +1,13 @@
+id: fc-kubectl-top
+title: "top: pods by CPU/memory"
+mode: flashcard
+domain: observability
+references:
+  - https://kubernetes.io/docs/reference/kubectl/generated/kubectl_top/
+
+prompt: |
+  List the Pods in namespace `prod` ranked by **memory** usage, highest first.
+  (Per-container breakdown: add `--containers`. Requires metrics-server.)
+solution:
+  commands:
+    - "kubectl top pod -n prod --sort-by=memory"

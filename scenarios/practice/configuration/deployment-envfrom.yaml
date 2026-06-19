@@ -1,0 +1,76 @@
+id: deployment-envfrom
+title: "Inject a whole ConfigMap as env with envFrom"
+mode: practice
+domain: configuration
+weight: 1
+estimated_minutes: 4
+randomize: true
+references:
+  - https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-configmap/#configure-all-key-value-pairs-in-a-configmap-as-container-environment-variables
+
+params:
+  appName: { pick: [web, api, worker] }
+
+# A ConfigMap with several keys already exists; the task is to surface ALL of
+# them as environment variables in one shot (envFrom), not key-by-key.
+setup:
+  manifests:
+    - |
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: app-config
+        namespace: {{.ns}}
+      data:
+        LOG_LEVEL: info
+        FEATURE_FLAG: "true"
+        REGION: eu-west
+
+prompt: |
+  In `{{.ns}}`, a ConfigMap `app-config` already exists. Create a Deployment
+  `{{.appName}}` (image `nginx:1.27`, 1 replica) that loads **every** key of
+  `app-config` as environment variables using `envFrom` (not individual
+  `valueFrom` entries).
+
+hints:
+  - "spec.template.spec.containers[].envFrom[].configMapRef.name"
+  - "kubectl create deployment {{.appName}} --image=nginx:1.27 -o yaml --dry-run=client > d.yaml, then add envFrom"
+
+verify:
+  - kind: Deployment
+    name: "{{.appName}}"
+    assert:
+      - path: "{.spec.template.spec.containers[0].envFrom[0].configMapRef.name}"
+        equals: "app-config"
+      - path: "{.status.readyReplicas}"
+        equals: "1"
+        wait: "90s"
+
+solution:
+  description: |
+    envFrom pulls every key of a ConfigMap (or Secret) into the container's
+    environment in one declaration — the env var names are the ConfigMap keys.
+    Use valueFrom.configMapKeyRef only when you need to pick or rename single keys.
+  manifests:
+    - |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: {{.appName}}
+        namespace: {{.ns}}
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: {{.appName}}
+        template:
+          metadata:
+            labels:
+              app: {{.appName}}
+          spec:
+            containers:
+              - name: app
+                image: nginx:1.27
+                envFrom:
+                  - configMapRef:
+                      name: app-config

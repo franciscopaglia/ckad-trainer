@@ -1,0 +1,64 @@
+id: deployment-set-image
+title: "Roll out a new image to a Deployment"
+mode: practice
+domain: pod-design
+weight: 1
+estimated_minutes: 4
+randomize: true
+references:
+  - https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#updating-a-deployment
+
+params:
+  appName: { pick: [web, api, store] }
+  newImage: { pick: ["nginx:1.27", "nginx:1.26"] }
+
+# A Deployment running an old image already exists; the task is to roll it
+# forward to a new image and confirm the rollout completes.
+setup:
+  manifests:
+    - |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: {{.appName}}
+        namespace: {{.ns}}
+      spec:
+        replicas: 2
+        selector:
+          matchLabels:
+            app: {{.appName}}
+        template:
+          metadata:
+            labels:
+              app: {{.appName}}
+          spec:
+            containers:
+              - name: app
+                image: nginx:1.25
+
+prompt: |
+  In `{{.ns}}`, Deployment `{{.appName}}` runs container `app` on an old image.
+  Update it to `{{.newImage}}` and make sure the rollout finishes with all
+  replicas ready.
+
+hints:
+  - "kubectl set image deployment/{{.appName}} app={{.newImage}} -n {{.ns}}"
+  - "kubectl rollout status deployment/{{.appName}} -n {{.ns}}"
+
+verify:
+  - kind: Deployment
+    name: "{{.appName}}"
+    assert:
+      - path: "{.spec.template.spec.containers[0].image}"
+        equals: "{{.newImage}}"
+      - path: "{.status.readyReplicas}"
+        equals: "2"
+        wait: "90s"
+
+solution:
+  description: |
+    `kubectl set image` patches the Pod template's container image, which triggers
+    a rolling update; `kubectl rollout status` blocks until the new ReplicaSet is
+    fully ready. Editing the Deployment YAML directly has the same effect.
+  commands:
+    - "kubectl set image deployment/{{.appName}} app={{.newImage}} -n {{.ns}}"

@@ -1,0 +1,14 @@
+id: fc-context-switch
+title: "switch kubectl context"
+mode: flashcard
+domain: core-concepts
+references:
+  - https://kubernetes.io/docs/reference/kubectl/generated/kubectl_config/kubectl_config_use-context/
+
+prompt: |
+  Every exam task starts by pointing kubectl at the right cluster. Switch the
+  active context to `cluster-2`. (See what's available first with
+  `kubectl config get-contexts`; confirm with `kubectl config current-context`.)
+solution:
+  commands:
+    - "kubectl config use-context cluster-2"

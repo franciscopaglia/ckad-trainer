@@ -1,0 +1,14 @@
+id: fc-kustomize-apply
+title: "kustomize: build and apply an overlay"
+mode: flashcard
+domain: pod-design
+references:
+  - https://kubernetes.io/docs/tasks/manage-kubernetes-objects/kustomization/
+
+prompt: |
+  A kustomization lives in `./overlays/prod`. Apply it to the cluster with
+  built-in kubectl kustomize support. (To preview the rendered YAML without
+  applying: `kubectl kustomize ./overlays/prod`.)
+solution:
+  commands:
+    - "kubectl apply -k ./overlays/prod"

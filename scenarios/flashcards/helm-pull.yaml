@@ -1,0 +1,13 @@
+id: fc-helm-pull
+title: "helm: download and extract a chart"
+mode: flashcard
+domain: pod-design
+references:
+  - https://helm.sh/docs/helm/helm_pull/
+
+prompt: |
+  Download the `bitnami/nginx` chart and extract it into the current directory
+  so you can inspect or modify its templates before installing.
+solution:
+  commands:
+    - "helm pull bitnami/nginx --untar"

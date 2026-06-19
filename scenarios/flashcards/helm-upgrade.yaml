@@ -1,0 +1,13 @@
+id: fc-helm-upgrade
+title: "helm: upgrade a release from a values file"
+mode: flashcard
+domain: pod-design
+references:
+  - https://helm.sh/docs/helm/helm_upgrade/
+
+prompt: |
+  Upgrade the existing release `web` (chart `bitnami/nginx`) applying the
+  overrides in `values.yaml`. (To undo it afterwards: `helm rollback web`.)
+solution:
+  commands:
+    - "helm upgrade web bitnami/nginx -f values.yaml"

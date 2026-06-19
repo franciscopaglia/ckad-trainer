@@ -18,6 +18,7 @@ import (
 
 	"github.com/franciscopaglia/ckad-trainer/internal/config"
 	"github.com/franciscopaglia/ckad-trainer/internal/engine"
+	"github.com/franciscopaglia/ckad-trainer/internal/paths"
 	"github.com/franciscopaglia/ckad-trainer/internal/scenario"
 )
 
@@ -56,7 +57,9 @@ func weightOf(slug string) int {
 	return 10
 }
 
-const sessionFile = "state/exam.json"
+// sessionFile is the persisted exam session, kept alongside the scenario state
+// files in the per-user state directory.
+func sessionFile() string { return filepath.Join(paths.StateDir(), "exam.json") }
 
 // Task is one exam item (a started scenario).
 type Task struct {
@@ -84,7 +87,7 @@ func (s *Session) Remaining() time.Duration {
 // Start samples count scenarios weighted by domain, starts each, and persists the
 // session. A non-zero seed makes the selection + draws reproducible.
 func Start(cfg *config.Config, scenarios []scenario.Scenario, count, minutes int, seed int64) (*Session, error) {
-	if _, err := os.Stat(sessionFile); err == nil {
+	if _, err := os.Stat(sessionFile()); err == nil {
 		return nil, errors.New("an exam is already in progress (run `exam grade` or `exam abort` first)")
 	}
 	if seed == 0 {
@@ -152,14 +155,14 @@ func sample(pool []scenario.Scenario, count int, rng *rand.Rand) []scenario.Scen
 
 // InProgress reports whether an exam session is active.
 func InProgress() bool {
-	_, err := os.Stat(sessionFile)
+	_, err := os.Stat(sessionFile())
 	return err == nil
 }
 
 // Clear removes the exam session file (no-op if there is none). The task
 // resources are ordinary scenario instances, cleaned up separately.
 func Clear() error {
-	if err := os.Remove(sessionFile); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if err := os.Remove(sessionFile()); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
 	return nil
@@ -167,7 +170,7 @@ func Clear() error {
 
 // Load reads the active session, or an error if there is none.
 func Load() (*Session, error) {
-	raw, err := os.ReadFile(sessionFile)
+	raw, err := os.ReadFile(sessionFile())
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, errors.New("no exam in progress (start one with `exam start`)")
@@ -242,7 +245,7 @@ func Grade(cfg *config.Config, scenarios []scenario.Scenario) (GradeReport, erro
 	}
 
 	rep.Domains, rep.WeightedScore = summarize(byDomain)
-	_ = os.Remove(sessionFile)
+	_ = os.Remove(sessionFile())
 	return rep, nil
 }
 
@@ -279,16 +282,16 @@ func Abort(cfg *config.Config) error {
 			_ = engine.Cleanup(cfg, inst)
 		}
 	}
-	return os.Remove(sessionFile)
+	return os.Remove(sessionFile())
 }
 
 func save(s *Session) error {
-	if err := os.MkdirAll(filepath.Dir(sessionFile), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(sessionFile()), 0o755); err != nil {
 		return err
 	}
 	raw, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(sessionFile, raw, 0o644)
+	return os.WriteFile(sessionFile(), raw, 0o644)
 }

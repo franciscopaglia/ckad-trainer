@@ -11,6 +11,7 @@ references:
 params:
   podName: { pattern: "secctx-{{randInt 100 999}}" }
   runAsUser: { pick: ["1000", "2000", "65534"] }
+  runAsGroup: { pick: ["3000", "4000"] }
   fsGroup: { pick: ["2000", "3000"] }
 
 variants:
@@ -49,6 +50,28 @@ variants:
           - path: "{.spec.containers[0].securityContext.capabilities.drop[*]}"
             contains: "ALL"
 
+  - name: hardened
+    weight: 1
+    prompt: |
+      In `{{.ns}}`, create a Pod `{{.podName}}` (image `busybox:1.36`, command
+      `sleep 3600`) whose CONTAINER `app` is hardened: `runAsUser {{.runAsUser}}`,
+      `runAsGroup {{.runAsGroup}}`, `readOnlyRootFilesystem: true`, and Linux
+      capabilities `drop: [ALL]` then `add: [NET_BIND_SERVICE]`.
+    verify:
+      - kind: Pod
+        name: "{{.podName}}"
+        assert:
+          - path: "{.spec.containers[0].securityContext.runAsUser}"
+            equals: "{{.runAsUser}}"
+          - path: "{.spec.containers[0].securityContext.runAsGroup}"
+            equals: "{{.runAsGroup}}"
+          - path: "{.spec.containers[0].securityContext.readOnlyRootFilesystem}"
+            equals: "true"
+          - path: "{.spec.containers[0].securityContext.capabilities.add[*]}"
+            contains: "NET_BIND_SERVICE"
+          - path: "{.spec.containers[0].securityContext.capabilities.drop[*]}"
+            contains: "ALL"
+
 solution:
   description: |
     A pod-level securityContext applies to all containers (and fsGroup affects
@@ -78,4 +101,13 @@ solution:
               allowPrivilegeEscalation: false
               capabilities:
                 drop: ["ALL"]
+            {{- end}}
+            {{- if eq .variant "hardened"}}
+            securityContext:
+              runAsUser: {{.runAsUser}}
+              runAsGroup: {{.runAsGroup}}
+              readOnlyRootFilesystem: true
+              capabilities:
+                drop: ["ALL"]
+                add: ["NET_BIND_SERVICE"]
             {{- end}}

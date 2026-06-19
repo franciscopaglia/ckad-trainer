@@ -1,0 +1,14 @@
+id: fc-kubectl-logs
+title: "container logs from a crashed/previous container"
+mode: flashcard
+domain: observability
+references:
+  - https://kubernetes.io/docs/reference/kubectl/generated/kubectl_logs/
+
+prompt: |
+  Pod `api` in namespace `prod` just restarted. Show the logs from its
+  **previous** (crashed) instance of container `app`. (Live tail instead:
+  `kubectl logs -f`; last 1h: `--since=1h`.)
+solution:
+  commands:
+    - "kubectl logs api -c app -n prod --previous"

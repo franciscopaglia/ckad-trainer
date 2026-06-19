@@ -1,0 +1,14 @@
+id: fc-helm-install
+title: "helm: install a chart with overrides"
+mode: flashcard
+domain: pod-design
+references:
+  - https://helm.sh/docs/helm/helm_install/
+
+prompt: |
+  The `bitnami` repo is already added. Install the `bitnami/nginx` chart as a
+  release named `web` into namespace `prod`, overriding `replicaCount` to `3`
+  without writing a values file.
+solution:
+  commands:
+    - "helm install web bitnami/nginx -n prod --set replicaCount=3"

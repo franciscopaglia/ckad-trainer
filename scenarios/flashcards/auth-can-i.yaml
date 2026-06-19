@@ -1,0 +1,13 @@
+id: fc-auth-can-i
+title: "check effective RBAC permissions"
+mode: flashcard
+domain: security
+references:
+  - https://kubernetes.io/docs/reference/access-authn-authz/authorization/#checking-api-access
+
+prompt: |
+  Verify whether ServiceAccount `viewer` in namespace `prod` is allowed to
+  `list` pods there — by impersonating it, not by reading the RoleBindings.
+solution:
+  commands:
+    - "kubectl auth can-i list pods --as=system:serviceaccount:prod:viewer -n prod"
