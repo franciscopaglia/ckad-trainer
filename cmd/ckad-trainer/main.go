@@ -286,8 +286,13 @@ func checkCmd() *cobra.Command {
 				return err
 			}
 			printReport(report)
+			// Persist the outcome so `status` shows whether this scenario is done.
+			if rerr := engine.RecordCheck(inst, report.Passed()); rerr != nil {
+				fmt.Fprintln(os.Stderr, dim("warning: could not record result: "+rerr.Error()))
+			}
 			if report.Passed() {
 				fmt.Printf("\n%s — %s\n", green("PASS"), s.Title)
+				fmt.Println(dim(fmt.Sprintf("marked complete · it stays up to inspect — tear it down with `ckad-trainer cleanup %s`", id)))
 				return nil
 			}
 			fmt.Printf("\n%s — keep going, then `check %s` again (or `solution %s`)\n", red("FAIL"), id, id)
@@ -367,29 +372,109 @@ func statusCmd() *cobra.Command {
 			if len(args) == 1 {
 				return showStatus(args[0])
 			}
-			return listActive()
+			cfg, err := loadConfig()
+			if err != nil {
+				return err
+			}
+			return listActive(cfg)
 		},
 	}
 }
 
-func listActive() error {
+func listActive(cfg *config.Config) error {
 	insts, err := engine.LoadActiveInstances()
 	if err != nil {
 		return err
 	}
 	if len(insts) == 0 {
 		fmt.Println("no active scenarios")
-	} else {
-		fmt.Printf("%-26s %-36s %-14s %s\n", "SCENARIO", "NAMESPACE", "VARIANT", "AGE")
-		for _, in := range insts {
-			fmt.Printf("%-26s %-36s %-14s %s\n", in.ScenarioID, in.Namespace, orDash(in.Variant), ageOf(in.StartedAt))
+		if exam.InProgress() {
+			fmt.Println("\nan exam is in progress — see `ckad-trainer exam status`")
 		}
-		fmt.Printf("\n%d active. `status <id>` re-shows a task; `check <id>` grades it.\n", len(insts))
+		return nil
+	}
+
+	// Reconcile against the cluster so we can flag instances whose namespace is
+	// gone. If the cluster is unreachable we just skip stale-detection.
+	live, reconciled := liveNamespaces(cfg)
+
+	fmt.Printf("%-26s %-11s %-36s %-16s %s\n", "SCENARIO", "STATUS", "NAMESPACE", "VARIANT", "AGE")
+	stale := 0
+	for _, in := range insts {
+		st := instStatus(in, live, reconciled)
+		if st == "stale" {
+			stale++
+		}
+		cell := colorStatus(fmt.Sprintf("%-11s", st))
+		fmt.Printf("%-26s %s %-36s %-16s %s\n", in.ScenarioID, cell, in.Namespace, orDash(in.Variant), ageOf(in.StartedAt))
+	}
+
+	fmt.Printf("\n%d active. `status <id>` re-shows a task; `check <id>` grades it.\n", len(insts))
+	if stale > 0 {
+		fmt.Printf("%d stale (namespace gone) — prune with `ckad-trainer cleanup --stale`.\n", stale)
+	}
+	if !reconciled {
+		fmt.Println(dim("(cluster unreachable — status shown from local state)"))
 	}
 	if exam.InProgress() {
 		fmt.Println("\nan exam is in progress — see `ckad-trainer exam status`")
 	}
 	return nil
+}
+
+// instStatus derives a one-word status for an active instance: stale when its
+// namespace no longer exists, otherwise the result of the last check (or
+// "in progress" when it has not been checked yet).
+func instStatus(in *engine.Instance, live map[string]bool, reconciled bool) string {
+	if reconciled && !live[in.Namespace] {
+		return "stale"
+	}
+	if in.CheckedAt.IsZero() {
+		return "in progress"
+	}
+	if in.Passed {
+		return "passed"
+	}
+	return "failed"
+}
+
+func colorStatus(s string) string {
+	switch strings.TrimSpace(s) {
+	case "passed":
+		return green(s)
+	case "failed":
+		return red(s)
+	case "stale":
+		return dim(s)
+	default:
+		return s
+	}
+}
+
+// liveNamespaces returns the set of trainer-managed namespaces that currently
+// exist on the cluster, and whether the lookup succeeded (false = unreachable).
+func liveNamespaces(cfg *config.Config) (map[string]bool, bool) {
+	kc := kubectl.New(cfg.Cluster.Kubectl, cfg.Cluster.Context)
+	items, err := kc.ListJSON("namespace", "", engine.LabelManagedBy+"="+engine.ManagedByValue)
+	if err != nil {
+		return nil, false
+	}
+	set := make(map[string]bool, len(items))
+	for _, it := range items {
+		md, _ := it["metadata"].(map[string]any)
+		name, _ := md["name"].(string)
+		if name == "" {
+			continue
+		}
+		// A namespace that is Terminating is on its way out — treat it as gone so
+		// its scenario shows up as stale (and is prunable) instead of lingering.
+		st, _ := it["status"].(map[string]any)
+		if phase, _ := st["phase"].(string); phase == "Terminating" {
+			continue
+		}
+		set[name] = true
+	}
+	return set, true
 }
 
 // showStatus re-renders the task for an active scenario (for when you've lost
@@ -411,9 +496,17 @@ func showStatus(id string) error {
 	if err != nil {
 		return err
 	}
+	done := ""
+	if !inst.CheckedAt.IsZero() {
+		if inst.Passed {
+			done = " · " + green("passed")
+		} else {
+			done = " · " + red("last check failed")
+		}
+	}
 	fmt.Printf("%s  [%s · %s]\n", bold(s.Title), s.Mode, s.Domain)
-	fmt.Printf("namespace: %s  %s  started %s ago\n\n",
-		inst.Namespace, dim(fmt.Sprintf("(seed %d)", inst.Seed)), ageOf(inst.StartedAt))
+	fmt.Printf("namespace: %s  %s  started %s ago%s\n\n",
+		inst.Namespace, dim(fmt.Sprintf("(seed %d)", inst.Seed)), ageOf(inst.StartedAt), done)
 	fmt.Println(prompt)
 	if len(s.Hints) > 0 {
 		fmt.Println("hints:")
@@ -446,21 +539,27 @@ func ageOf(t time.Time) string {
 }
 
 func cleanupCmd() *cobra.Command {
-	var all bool
+	var all, stale bool
 	cmd := &cobra.Command{
 		Use:   "cleanup [scenario-id]",
-		Short: "Delete a scenario's namespace and tracked objects (--all for every active one)",
+		Short: "Delete a scenario's namespace and tracked objects (--all, or --stale to prune orphans)",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := loadConfig()
 			if err != nil {
 				return err
 			}
+			if all && stale {
+				return fmt.Errorf("use either --all or --stale, not both")
+			}
 			if all {
 				return cleanupAll(cfg)
 			}
+			if stale {
+				return cleanupStale(cfg)
+			}
 			if len(args) != 1 {
-				return fmt.Errorf("give a scenario id, or use --all")
+				return fmt.Errorf("give a scenario id, or use --all / --stale")
 			}
 			id := args[0]
 			inst, err := engine.LoadInstance(id)
@@ -475,7 +574,41 @@ func cleanupCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&all, "all", false, "clean up every active scenario (and end any exam)")
+	cmd.Flags().BoolVar(&stale, "stale", false, "prune state for scenarios whose namespace is already gone")
 	return cmd
+}
+
+// cleanupStale removes local state for instances whose namespace no longer
+// exists on the cluster, freeing their ids so they can be started again.
+func cleanupStale(cfg *config.Config) error {
+	insts, err := engine.LoadActiveInstances()
+	if err != nil {
+		return err
+	}
+	live, reconciled := liveNamespaces(cfg)
+	if !reconciled {
+		return fmt.Errorf("cluster unreachable — cannot tell which scenarios are stale")
+	}
+	pruned := 0
+	for _, in := range insts {
+		if live[in.Namespace] {
+			continue
+		}
+		// Cleanup is namespace-delete (a no-op when already gone) plus removal of
+		// tracked cluster-scoped objects and the local state file.
+		if err := engine.Cleanup(cfg, in); err != nil {
+			fmt.Printf("  %s %-26s %v\n", red("warn"), in.ScenarioID, err)
+			continue
+		}
+		fmt.Printf("  pruned %-26s (namespace %s was gone)\n", in.ScenarioID, in.Namespace)
+		pruned++
+	}
+	if pruned == 0 {
+		fmt.Println("no stale scenarios")
+		return nil
+	}
+	fmt.Printf("done: pruned %d stale scenario(s)\n", pruned)
+	return nil
 }
 
 func cleanupAll(cfg *config.Config) error {

@@ -175,22 +175,36 @@ ckad-trainer status
 ```
 
 ```
-SCENARIO                   NAMESPACE                       VARIANT      AGE
-configmap-consume          ckad-configmap-consume-czmva    single-key   4m
-tolerations                ckad-tolerations-d1wbh          -            2m
+SCENARIO                   STATUS      NAMESPACE                       VARIANT          AGE
+configmap-consume          passed      ckad-configmap-consume-czmva    single-key       4m
+tolerations                in progress ckad-tolerations-d1wbh          -                2m
+networkpolicy-egress       stale       ckad-networkpolicy-egress-x9p   -                9m
 ```
 
-Re-show the full task for one (read-only, instant — no cluster calls):
+The **STATUS** column reflects the last `check` and the live cluster:
+
+- `in progress` — started but not checked (or last check failed → `failed`)
+- `passed` — your last `check` passed; the scenario stays up so you can inspect
+  it, so this is just a record that you finished — clean it up when you're done
+- `stale` — the namespace is gone (deleted out-of-band, cluster reset, etc.); the
+  leftover state is harmless but blocks re-starting that id until pruned
+
+Passing a scenario does **not** auto-clean it; `check` simply records the result
+and reminds you how to tear it down.
+
+Re-show the full task for one (read-only, instant — no cluster calls; also prints
+whether your last check passed):
 
 ```bash
 ckad-trainer status configmap-consume
 ```
 
-Tear down a single scenario, or everything at once:
+Tear down a single scenario, everything, or just the stale leftovers:
 
 ```bash
 ckad-trainer cleanup configmap-consume    # one
 ckad-trainer cleanup --all                # every active scenario (and ends any exam)
+ckad-trainer cleanup --stale              # prune state whose namespace is already gone
 ```
 
 ---
@@ -267,11 +281,11 @@ ckad-trainer exam abort
 | `doctor` | Check kubectl, the safety context guard, and reachability |
 | `list` | List the scenario catalog (🎲 = randomized) |
 | `start <id> [--seed N] [--force]` | Set up a scenario and print the task |
-| `status [<id>]` | List active scenarios, or re-show one task |
-| `check <id>` | Verify your work; per-assertion PASS/FAIL table |
+| `status [<id>]` | List active scenarios with a STATUS column (passed/in progress/stale), or re-show one task |
+| `check <id>` | Verify your work; per-assertion PASS/FAIL table (records the result) |
 | `solution <id>` | Show the reference answer (YAML/commands + explanation) |
 | `solve <id>` | Apply the reference answer to the cluster (to inspect it) |
-| `cleanup <id>` / `cleanup --all` | Tear down one / every active scenario |
+| `cleanup <id>` / `--all` / `--stale` | Tear down one / every active scenario / prune state for gone namespaces |
 | `reset <id>` | Clean up and restart with a fresh draw |
 | `random [--domain <slug>] [--seed N]` | Start a random scenario |
 | `drill` | Flashcard recall drills for kubectl command formats |

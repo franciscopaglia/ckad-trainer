@@ -58,6 +58,11 @@ type Instance struct {
 	Params        map[string]string `json:"params"`
 	ClusterScoped []ObjRef          `json:"cluster_scoped"`
 	StartedAt     time.Time         `json:"started_at"`
+
+	// Result of the most recent `check`, persisted so `status` can show progress.
+	// CheckedAt is zero until the scenario has been checked at least once.
+	Passed    bool      `json:"passed,omitempty"`
+	CheckedAt time.Time `json:"checked_at,omitempty"`
 }
 
 // Start resolves the scenario, creates its namespace and setup state, persists
@@ -237,6 +242,15 @@ func LoadActiveInstances() ([]*Instance, error) {
 func HasState(id string) bool {
 	_, err := os.Stat(statePath(id))
 	return err == nil
+}
+
+// RecordCheck persists the outcome of the most recent check on this instance so
+// `status` can show whether you have completed it. It writes local state only and
+// never touches the cluster, keeping Check itself read-only.
+func RecordCheck(inst *Instance, passed bool) error {
+	inst.Passed = passed
+	inst.CheckedAt = time.Now().UTC()
+	return writeState(inst)
 }
 
 // --- helpers ---
