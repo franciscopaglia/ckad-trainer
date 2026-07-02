@@ -52,4 +52,44 @@ scenario across seeds); prove solvable with `make smoke`, or one scenario:
   belongs in flashcards (`mode: flashcard`, smoke-skipped, the shown answer
   is `solution.commands[0]`).
 
+## Catalog backlog (specs — implement top to bottom, delete entries when done)
+
+When adding any of these, also bump the scenario counts in README.md (intro)
+and USAGE.md (§10 intro + the domain table's "Covered" cell) in the same
+change, and prove it with the subset smoke run above.
+
+1. **`taint-toleration`** (core-concepts, randomize) — the existing
+   `tolerations` scenario never proves the toleration *works*; this one taints
+   the nodes for real. Setup: `kubectl taint nodes --all
+   {{.key}}={{.value}}:NoSchedule --overwrite`. Task: pod with a matching
+   toleration; assert toleration fields AND `status.phase == Running`
+   (wait 60s). Cleanup: `cleanup.commands` untaint. **Gotchas:** (a) verify
+   `kubectl taint nodes --all <key>-` exits 0 when the taint is absent —
+   cleanup must be idempotent; if it exits non-zero, the engine needs a
+   tolerate-absence strategy first. (b) While active, other new Pods without
+   the toleration won't schedule (single-node clusters especially) — put a
+   comment in the YAML saying runs should not overlap with other scenarios'
+   Running-asserts. Use NoSchedule (not NoExecute) so existing Pods survive.
+2. **`pod-affinity`** (core-concepts, randomize, two variants) — setup
+   creates a labeled anchor Pod (e.g. `app=cache`). Variant `co-locate`:
+   required podAffinity on that label, `topologyKey: kubernetes.io/hostname`,
+   assert affinity fields + Running (wait). Variant `spread`: podAntiAffinity
+   — MUST be `preferredDuringSchedulingIgnoredDuringExecution` (required
+   anti-affinity can never schedule on a single-node cluster); assert the
+   preferred term's fields + Running.
+3. **`crd-instance`** (configuration) — setup applies a tiny Namespaced-scope
+   CRD and waits `--for condition=Established`; task: discover it
+   (`api-resources`/`explain`) and create a custom resource in the scenario
+   namespace; verify fetches the CR by `<plural>.<group>` and asserts a spec
+   field. **Gotchas:** the CRD is cluster-scoped → must be listed in
+   `cleanup.cluster_scoped` (the validator only forces this for cluster-scoped
+   *checks*, so remember it for setup-created CRDs); make the group unique per
+   run (pattern param, e.g. `training{{randInt 100 999}}.example.com`) so
+   back-to-back runs don't race the CRD's async deletion; CRD name must equal
+   `<plural>.<group>`.
+
+Rejected for now: Helm/Kustomize/docker hands-on (need tooling/files outside
+the cluster — flashcards cover them), API-deprecation hands-on (can't set up
+a deprecated-but-served API version portably).
+
 > Keep this file in sync when assertion/render/cleanup semantics change.
