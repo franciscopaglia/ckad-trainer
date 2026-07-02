@@ -351,12 +351,12 @@ safety:
 
 ## 10. Scenario catalog
 
-72 scenarios — 49 hands-on (most randomized) plus 23 kubectl/helm flashcards —
+73 scenarios — 50 hands-on (most randomized) plus 23 kubectl/helm flashcards —
 mapped to the 2026 CKAD domains:
 
 | Domain (weight) | Covered |
 |-----------------|---------|
-| **App Environment, Config & Security** (25%) | ConfigMaps (`envFrom`/keyRef/volume/`items`/immutable/subPath), Secrets (env/volume/docker-registry), resource requests/limits, ResourceQuota, LimitRange, securityContext (runAsUser/Group, fsGroup, caps add/drop, readOnlyRootFS), ServiceAccount, RBAC (Role + ClusterRole, RoleBinding/ClusterRoleBinding, `auth can-i`), static PV→PVC→Pod, dynamic PVC provisioning |
+| **App Environment, Config & Security** (25%) | ConfigMaps (`envFrom`/keyRef/volume/`items`/immutable/subPath), Secrets (env/volume/docker-registry), resource requests/limits, ResourceQuota, LimitRange, securityContext (runAsUser/Group, fsGroup, caps add/drop, readOnlyRootFS), ServiceAccount, RBAC (Role + ClusterRole, RoleBinding/ClusterRoleBinding, `auth can-i`), static PV→PVC→Pod, dynamic PVC provisioning, CRDs (discover + create a custom resource) |
 | **Application Design & Build** (20%) | multi-container + init + native sidecar + ambassador proxy (emptyDir/localhost), Jobs (fields, Indexed/TTL), CronJob, command/args, downward API, PriorityClass, node scheduling (nodeSelector/tolerations/real taints/pod (anti-)affinity) |
 | **Application Deployment** (20%) | Deployments + scale, `set image` rollouts, rollout undo/pause, update strategies, canary, blue/green, HPA |
 | **Services & Networking** (20%) | Service ClusterIP/NodePort, endpoints debugging, NetworkPolicy ingress/egress, Ingress routing + TLS termination |

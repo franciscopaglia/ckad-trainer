@@ -52,25 +52,13 @@ scenario across seeds); prove solvable with `make smoke`, or one scenario:
   belongs in flashcards (`mode: flashcard`, smoke-skipped, the shown answer
   is `solution.commands[0]`).
 
-## Catalog backlog (specs — implement top to bottom, delete entries when done)
+## Adding scenarios
 
-When adding any of these, also bump the scenario counts in README.md (intro)
-and USAGE.md (§10 intro + the domain table's "Covered" cell) in the same
-change, and prove it with the subset smoke run above.
-
-1. **`crd-instance`** (configuration) — setup applies a tiny Namespaced-scope
-   CRD and waits `--for condition=Established`; task: discover it
-   (`api-resources`/`explain`) and create a custom resource in the scenario
-   namespace; verify fetches the CR by `<plural>.<group>` and asserts a spec
-   field. **Gotchas:** the CRD is cluster-scoped → must be listed in
-   `cleanup.cluster_scoped` (the validator only forces this for cluster-scoped
-   *checks*, so remember it for setup-created CRDs); make the group unique per
-   run (pattern param, e.g. `training{{randInt 100 999}}.example.com`) so
-   back-to-back runs don't race the CRD's async deletion; CRD name must equal
-   `<plural>.<group>`.
-
-Rejected for now: Helm/Kustomize/docker hands-on (need tooling/files outside
-the cluster — flashcards cover them), API-deprecation hands-on (can't set up
-a deprecated-but-served API version portably).
+Bump the scenario counts in README.md (intro) and USAGE.md (§10 intro + the
+domain table's "Covered" cell) in the same change, and prove solvability with
+the subset smoke run above. Rejected catalog ideas (don't re-propose without
+new leverage): Helm/Kustomize/docker hands-on (need tooling/files outside the
+cluster — flashcards cover them), API-deprecation hands-on (can't set up a
+deprecated-but-served API version portably).
 
 > Keep this file in sync when assertion/render/cleanup semantics change.

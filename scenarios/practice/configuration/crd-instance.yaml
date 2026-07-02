@@ -1,0 +1,91 @@
+# The CRD group is unique per run so back-to-back runs don't race the CRD's
+# asynchronous deletion; the CRD (cluster-scoped) is removed via
+# cleanup.cluster_scoped, which also deletes any remaining CRs.
+id: crd-instance
+title: "Discover a CRD and create a custom resource"
+mode: practice
+domain: configuration
+weight: 1
+estimated_minutes: 5
+randomize: true
+references:
+  - https://kubernetes.io/docs/tasks/extend-kubernetes/custom-resources/custom-resource-definitions/
+
+params:
+  group: { pattern: "training{{randInt 100 999}}.example.com" }
+  crName: { pick: [demo, sample, main] }
+  size: { range: { min: 2, max: 5 } }
+  color: { pick: [blue, green, red] }
+
+setup:
+  manifests:
+    - |
+      apiVersion: apiextensions.k8s.io/v1
+      kind: CustomResourceDefinition
+      metadata:
+        name: widgets.{{.group}}
+      spec:
+        group: {{.group}}
+        scope: Namespaced
+        names:
+          plural: widgets
+          singular: widget
+          kind: Widget
+        versions:
+          - name: v1
+            served: true
+            storage: true
+            schema:
+              openAPIV3Schema:
+                type: object
+                properties:
+                  spec:
+                    type: object
+                    properties:
+                      size:
+                        type: integer
+                      color:
+                        type: string
+  commands:
+    - "kubectl wait --for condition=Established crd/widgets.{{.group}} --timeout=60s"
+
+prompt: |
+  An operator has installed a CustomResourceDefinition for kind `Widget`
+  (API group `{{.group}}`). Discover it (`kubectl api-resources`,
+  `kubectl explain`), then create a `Widget` named `{{.crName}}` in `{{.ns}}`
+  with `spec.size: {{.size}}` and `spec.color: {{.color}}`.
+
+hints:
+  - "kubectl api-resources | grep -i widget shows the group/version and whether it's namespaced."
+  - "A CR manifest is ordinary YAML: apiVersion <group>/v1, kind Widget, metadata, spec."
+
+verify:
+  - kind: "widgets.{{.group}}"
+    name: "{{.crName}}"
+    assert:
+      - path: "{.spec.size}"
+        equals: "{{.size}}"
+      - path: "{.spec.color}"
+        equals: "{{.color}}"
+
+solution:
+  description: |
+    CRDs extend the API; once one is Established, its custom resources are
+    managed like any built-in object. `kubectl api-resources` reveals the
+    group/version and scope; `kubectl explain widget --recursive` documents the
+    schema the CRD declares.
+  manifests:
+    - |
+      apiVersion: {{.group}}/v1
+      kind: Widget
+      metadata:
+        name: {{.crName}}
+        namespace: {{.ns}}
+      spec:
+        size: {{.size}}
+        color: {{.color}}
+
+cleanup:
+  cluster_scoped:
+    - kind: CustomResourceDefinition
+      name: "widgets.{{.group}}"
