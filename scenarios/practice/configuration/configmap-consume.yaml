@@ -39,8 +39,9 @@ variants:
       - kind: Pod
         name: "{{.podName}}"
         assert:
-          - path: '{.spec.containers[0].envFrom[0].configMapRef.name}'
-            equals: "{{.cmName}}"
+          # envFrom[*] + contains: don't fail on extra envFrom entries or ordering.
+          - path: '{.spec.containers[0].envFrom[*].configMapRef.name}'
+            contains: "{{.cmName}}"
 
   - name: single-key
     weight: 1

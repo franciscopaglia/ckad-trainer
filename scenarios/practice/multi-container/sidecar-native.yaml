@@ -36,6 +36,12 @@ verify:
         equals: "app"
       - path: "{.spec.volumes[*].emptyDir}"
         exists: true
+      # Match the mounts by path (volumeMounts[*]); the injected ServiceAccount
+      # token mount can occupy index 0.
+      - path: "{.spec.initContainers[0].volumeMounts[*].mountPath}"
+        contains: "{{.mountPath}}"
+      - path: "{.spec.containers[0].volumeMounts[*].mountPath}"
+        contains: "{{.mountPath}}"
       - path: "{.status.phase}"
         equals: "Running"
         wait: "60s"

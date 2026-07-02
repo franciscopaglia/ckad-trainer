@@ -46,6 +46,8 @@ verify:
   - kind: RoleBinding
     name: "{{.bindName}}"
     assert:
+      - path: "{.roleRef.kind}"
+        equals: "Role"
       - path: "{.roleRef.name}"
         equals: "{{.roleName}}"
       - path: "{.subjects[0].kind}"

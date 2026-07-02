@@ -40,8 +40,9 @@ verify:
   - kind: Deployment
     name: "{{.appName}}"
     assert:
-      - path: "{.spec.template.spec.containers[0].envFrom[0].configMapRef.name}"
-        equals: "app-config"
+      # envFrom[*] + contains: don't fail on extra envFrom entries or ordering.
+      - path: "{.spec.template.spec.containers[0].envFrom[*].configMapRef.name}"
+        contains: "app-config"
       - path: "{.status.readyReplicas}"
         equals: "1"
         wait: "90s"

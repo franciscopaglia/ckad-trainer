@@ -34,6 +34,8 @@ prompt: |
   In `{{.ns}}`, Service `web` (port 80) already exists. Create an Ingress
   `{{.ingName}}` that terminates TLS for host `{{.host}}` using the TLS Secret
   `{{.secretName}}`, routing path `/` (pathType `Prefix`) to `web:80`.
+  (The Secret doesn't exist and you don't need to create it — the Ingress just
+  references it by name.)
 
 hints:
   - "spec.tls[] pairs a list of hosts with the secretName that holds the cert."
@@ -49,6 +51,10 @@ verify:
         equals: "{{.secretName}}"
       - path: "{.spec.rules[0].host}"
         equals: "{{.host}}"
+      - path: "{.spec.rules[0].http.paths[0].path}"
+        equals: "/"
+      - path: "{.spec.rules[0].http.paths[0].pathType}"
+        equals: "Prefix"
       - path: "{.spec.rules[0].http.paths[0].backend.service.name}"
         equals: "web"
 

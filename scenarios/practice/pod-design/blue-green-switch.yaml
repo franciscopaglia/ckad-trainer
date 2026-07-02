@@ -86,6 +86,9 @@ verify:
     assert:
       - path: "{.spec.selector.version}"
         equals: "green"
+      # The prompt says to keep the app label in the selector.
+      - path: "{.spec.selector.app}"
+        equals: "{{.appName}}"
   - kind: Endpoints
     name: "{{.appName}}"
     assert:

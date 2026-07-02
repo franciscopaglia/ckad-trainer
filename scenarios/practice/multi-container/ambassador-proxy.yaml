@@ -22,17 +22,18 @@ prompt: |
 
 hints:
   - "Two containers in one Pod share localhost — no Service needed between them."
-  - "Order matters for the check: list `app` first, then `ambassador`."
+  - "Both are ordinary entries in spec.containers; only the names and the port matter."
 
 verify:
   - kind: Pod
     name: "{{.podName}}"
     assert:
-      - path: "{.spec.containers[0].name}"
-        equals: "app"
-      - path: "{.spec.containers[1].name}"
-        equals: "ambassador"
-      - path: "{.spec.containers[1].ports[0].containerPort}"
+      # Name-based, not index-based: container order in the manifest is irrelevant.
+      - path: "{.spec.containers[*].name}"
+        contains: "app"
+      - path: "{.spec.containers[*].name}"
+        contains: "ambassador"
+      - path: '{.spec.containers[?(@.name=="ambassador")].ports[0].containerPort}'
         equals: "{{.proxyPort}}"
       - path: "{.status.phase}"
         equals: "Running"

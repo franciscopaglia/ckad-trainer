@@ -54,6 +54,10 @@ verify:
     assert:
       - path: '{.spec.volumes[?(@.persistentVolumeClaim.claimName=="data-pvc")].name}'
         exists: true
+      # Match the mount by path (volumeMounts[*]); the injected ServiceAccount
+      # token mount can occupy index 0.
+      - path: "{.spec.containers[0].volumeMounts[*].mountPath}"
+        contains: "/data"
       - path: "{.status.phase}"
         in: ["Running", "Succeeded"]
         wait: "60s"

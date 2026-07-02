@@ -18,8 +18,8 @@ prompt: |
       replicas, Pod labels `app={{.appName}}` and `track=stable`.
     - Deployment `{{.appName}}-canary`: image `nginx:1.27`, 1 replica,
       Pod labels `app={{.appName}}` and `track=canary`.
-    - Service `{{.appName}}`: selects `app={{.appName}}` (so it load-balances
-      across BOTH), port 80.
+    - Service `{{.appName}}`: selects ONLY `app={{.appName}}` — no `track`
+      label, so it load-balances across BOTH — on port 80.
 
 hints:
   - "Both Deployments share the app label; the Service selects only that label so traffic splits by replica count."
@@ -45,6 +45,12 @@ verify:
     assert:
       - path: "{.spec.selector.app}"
         equals: "{{.appName}}"
+      # A track label in the selector would send all traffic to one side —
+      # a "canary" that gets 0% or 100% of requests. It must be absent.
+      - path: "{.spec.selector.track}"
+        exists: false
+      - path: "{.spec.ports[0].port}"
+        equals: "80"
   - kind: Endpoints
     name: "{{.appName}}"
     assert:

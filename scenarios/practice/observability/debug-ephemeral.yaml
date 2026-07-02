@@ -40,8 +40,10 @@ verify:
   - kind: Pod
     name: "{{.podName}}"
     assert:
-      - path: "{.spec.ephemeralContainers[0].image}"
-        equals: "busybox:1.36"
+      # [*] + contains, not [0] + equals: ephemeral containers can never be
+      # removed, so a first attempt with a wrong image must not block the check.
+      - path: "{.spec.ephemeralContainers[*].image}"
+        contains: "busybox:1.36"
 
 solution:
   description: |
