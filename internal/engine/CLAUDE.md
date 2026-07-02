@@ -17,11 +17,20 @@ rendered with the instance's draw, never printed raw.
 - **Start**: guards the safety context (`cluster.Guard`), refuses if the id
   already has state, draws variant+params from the seed, creates a labeled
   namespace, applies `setup` manifests/commands, records the cluster-scoped
-  cleanup targets, writes state.
+  cleanup targets, writes state. **Any failure after the namespace exists rolls
+  back** (`rollbackStart` → `teardown`): the state file isn't written yet, so
+  without rollback the namespace and any setup side effects would be orphaned.
 - **Check**: read-only on the cluster. Returns a `CheckReport`. Does **not**
   write result fields — the `check` command calls `RecordCheck` afterward.
-- **Cleanup**: deletes the namespace + tracked cluster-scoped objects + state
-  file. Also guards the safety context.
+- **Cleanup**: guards the safety context, then `teardown` (namespace + tracked
+  cluster-scoped objects + cleanup commands) + removes the state file.
+- **Scenario commands run without a shell**: setup/cleanup/solution commands
+  are split quote-aware (`splitWords`/`kubectlArgs` in `words.go` — single/double
+  quotes, backslash escapes; blanks and `#` comments skipped; leading `kubectl`
+  stripped) and passed as argv to the context-injecting client. `CheckDraw`
+  validates that every rendered command splits cleanly, so unbalanced quotes
+  fail `make test`, not the cluster. No pipes/redirects/`$VARS` — it's argv,
+  not a shell.
 
 ## Instance & state model
 

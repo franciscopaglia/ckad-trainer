@@ -82,6 +82,21 @@ func CheckDraw(s scenario.Scenario, seed int64) error {
 			return err
 		}
 	}
+	// Commands are run without a shell, so they must also split cleanly
+	// (quote-aware); catch unbalanced quotes here, not on the cluster.
+	var commands []string
+	commands = append(commands, s.Setup.Commands...)
+	commands = append(commands, s.Solution.Commands...)
+	commands = append(commands, s.Cleanup.Commands...)
+	for _, c := range commands {
+		rendered, err := render(c, data)
+		if err != nil {
+			return err
+		}
+		if _, err := kubectlArgs(rendered); err != nil {
+			return fmt.Errorf("command %q: %w", c, err)
+		}
+	}
 	for _, c := range resolveChecks(s, inst) {
 		if _, err := renderCheck(c, data); err != nil {
 			return err

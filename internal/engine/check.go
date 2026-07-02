@@ -212,16 +212,15 @@ func ApplySolution(cfg *config.Config, s scenario.Scenario, inst *Instance) erro
 		if err != nil {
 			return err
 		}
-		line := strings.TrimSpace(r)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue // skip blank lines and comment-only "commands"
+		args, err := kubectlArgs(r) // quote-aware split; skips blanks/comments
+		if err != nil {
+			return fmt.Errorf("solution command %q: %w", r, err)
 		}
-		args := strings.Fields(line)
-		if args[0] == "kubectl" {
-			args = args[1:]
+		if args == nil {
+			continue
 		}
 		if _, err := kc.Raw(args...); err != nil {
-			return fmt.Errorf("solution command %q: %w", line, err)
+			return fmt.Errorf("solution command %q: %w", r, err)
 		}
 	}
 	return nil

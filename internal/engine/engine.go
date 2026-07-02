@@ -133,35 +133,50 @@ func Start(cfg *config.Config, s scenario.Scenario, seed int64) (*Instance, erro
 	for _, m := range s.Setup.Manifests {
 		rendered, err := render(m, data)
 		if err != nil {
-			return nil, fmt.Errorf("rendering setup manifest: %w", err)
+			return nil, rollbackStart(kc, inst, fmt.Errorf("rendering setup manifest: %w", err))
 		}
 		labeled, err := injectLabels(rendered, labels)
 		if err != nil {
-			return nil, fmt.Errorf("labeling setup manifest: %w", err)
+			return nil, rollbackStart(kc, inst, fmt.Errorf("labeling setup manifest: %w", err))
 		}
 		if err := kc.Apply(labeled); err != nil {
-			return nil, err
+			return nil, rollbackStart(kc, inst, err)
 		}
 	}
 	// Run setup commands.
 	for _, c := range s.Setup.Commands {
 		rendered, err := render(c, data)
 		if err != nil {
-			return nil, fmt.Errorf("rendering setup command: %w", err)
+			return nil, rollbackStart(kc, inst, fmt.Errorf("rendering setup command: %w", err))
 		}
-		args := strings.Fields(rendered)
-		if len(args) > 0 && args[0] == "kubectl" {
-			args = args[1:]
+		args, err := kubectlArgs(rendered)
+		if err != nil {
+			return nil, rollbackStart(kc, inst, fmt.Errorf("parsing setup command: %w", err))
+		}
+		if args == nil {
+			continue
 		}
 		if _, err := kc.Raw(args...); err != nil {
-			return nil, err
+			return nil, rollbackStart(kc, inst, err)
 		}
 	}
 
 	if err := writeState(inst); err != nil {
-		return nil, err
+		return nil, rollbackStart(kc, inst, err)
 	}
 	return inst, nil
+}
+
+// rollbackStart tears down a partially-started run. The state file is not
+// written yet at any point this is called from, so without the rollback the
+// namespace (and any cleanup-command state, e.g. node taints) would be
+// orphaned — invisible to `status` and unreachable by `cleanup`.
+func rollbackStart(kc *kubectl.Client, inst *Instance, cause error) error {
+	if terr := teardown(kc, inst); terr != nil {
+		return fmt.Errorf("%v (rollback also failed: %v — namespace %s may need manual deletion)",
+			cause, terr, inst.Namespace)
+	}
+	return fmt.Errorf("%w (start rolled back, nothing left on the cluster)", cause)
 }
 
 // Cleanup deletes the scenario namespace, any tracked cluster-scoped objects, and
@@ -171,6 +186,17 @@ func Cleanup(cfg *config.Config, inst *Instance) error {
 	if err := cluster.Guard(cfg, kc); err != nil {
 		return err
 	}
+	if err := teardown(kc, inst); err != nil {
+		return err
+	}
+	return os.Remove(statePath(inst.ScenarioID))
+}
+
+// teardown removes everything a run created on the cluster: the namespace,
+// tracked cluster-scoped objects, and the rendered cleanup commands. Shared by
+// Cleanup and by Start's failure rollback. Cleanup commands must be idempotent:
+// a failed teardown keeps the state file, so the whole thing can be retried.
+func teardown(kc *kubectl.Client, inst *Instance) error {
 	if err := kc.DeleteNamespace(inst.Namespace); err != nil {
 		return err
 	}
@@ -179,18 +205,19 @@ func Cleanup(cfg *config.Config, inst *Instance) error {
 			return err
 		}
 	}
-	// Cleanup commands were rendered at Start; they must be idempotent because a
-	// failed cleanup keeps the state file, so the whole teardown can be retried.
 	for _, c := range inst.CleanupCommands {
-		args := strings.Fields(c)
-		if len(args) > 0 && args[0] == "kubectl" {
-			args = args[1:]
+		args, err := kubectlArgs(c)
+		if err != nil {
+			return fmt.Errorf("parsing cleanup command: %w", err)
+		}
+		if args == nil {
+			continue
 		}
 		if _, err := kc.Raw(args...); err != nil {
 			return err
 		}
 	}
-	return os.Remove(statePath(inst.ScenarioID))
+	return nil
 }
 
 // RenderPrompt returns the task text for the instance's chosen variant (or the
