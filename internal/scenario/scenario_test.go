@@ -3,7 +3,10 @@
 
 package scenario
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func base() Scenario {
 	return Scenario{
@@ -96,5 +99,34 @@ func TestValidateFlashcardNeedsNoPrompt(t *testing.T) {
 	}
 	if err := s.Validate(); err != nil {
 		t.Fatalf("flashcard should be valid without a prompt, got %v", err)
+	}
+}
+
+func TestFindSuggestsNearMisses(t *testing.T) {
+	scenarios := []Scenario{
+		{ID: "configmap-consume"}, {ID: "configmap-immutable"}, {ID: "tolerations"},
+	}
+	if _, err := Find(scenarios, "configmap-consume"); err != nil {
+		t.Fatalf("exact match should succeed, got %v", err)
+	}
+	_, err := Find(scenarios, "configmap-consme") // typo
+	if err == nil || !strings.Contains(err.Error(), "configmap-consume") {
+		t.Fatalf("expected a did-you-mean for the typo, got %v", err)
+	}
+	_, err = Find(scenarios, "tolera") // partial id
+	if err == nil || !strings.Contains(err.Error(), "tolerations") {
+		t.Fatalf("expected a substring suggestion, got %v", err)
+	}
+	_, err = Find(scenarios, "zzzzzz") // nothing close
+	if err == nil || strings.Contains(err.Error(), "did you mean") {
+		t.Fatalf("expected a plain not-found error, got %v", err)
+	}
+}
+
+func TestValidateTemplatedHintMustParse(t *testing.T) {
+	s := base()
+	s.Hints = []string{"kubectl get pod {{.podName"}
+	if err := s.Validate(); err == nil {
+		t.Fatal("expected error for an unparsable hint template")
 	}
 }

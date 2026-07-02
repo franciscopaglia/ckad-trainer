@@ -10,7 +10,9 @@ solution apply), `random.go` (seeded draws). Tests: `state_test.go`,
 ## Lifecycle
 
 `Start` → user works → `Check` → `Cleanup`. `RecordCheck` persists the check
-result so `status` can show progress.
+result so `status` can show progress. The task text shown to the user comes from
+`RenderPrompt` *and* `RenderHints` — hints are templated fields too and must be
+rendered with the instance's draw, never printed raw.
 
 - **Start**: guards the safety context (`cluster.Guard`), refuses if the id
   already has state, draws variant+params from the seed, creates a labeled
@@ -50,6 +52,11 @@ result so `status` can show progress.
   deletion. `kubectl Delete` uses `--ignore-not-found`, so listing an object a
   given variant didn't create is safe. Use a per-run-unique name (e.g. a
   `pattern` param) to avoid collisions between concurrent runs.
+- **Cleanup commands** (`cleanup.commands`) undo cluster state the object model
+  can't express (e.g. a node label added by a setup command). They are rendered
+  at Start into `Instance.CleanupCommands`, run kubectl-only after the
+  namespace/object deletion, and **must be idempotent** — a failed cleanup keeps
+  the state file and is retried whole.
 - **Labels** on everything created: `app.kubernetes.io/managed-by=ckad-trainer`,
   `ckad-trainer/scenario`, `ckad-trainer/run`. Namespace cleanup is by name;
   `status` reconciliation lists namespaces by the managed-by label.

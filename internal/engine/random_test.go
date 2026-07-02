@@ -67,3 +67,22 @@ func TestRenderCheckDoesNotMutate(t *testing.T) {
 			c.Name, c.Assert[0].Equals, c.Assert[0].In[0])
 	}
 }
+
+// TestRenderHints covers the fix for hints printed with raw {{.param}}
+// placeholders: hints must render with the instance's draw, like the prompt.
+func TestRenderHints(t *testing.T) {
+	s := scenario.Scenario{
+		ID: "t", Mode: scenario.ModePractice, Domain: "configuration",
+		Prompt: "p",
+		Hints:  []string{"kubectl get pod -n {{.ns}}", "scale to {{.replicas}}"},
+	}
+	inst := &Instance{ScenarioID: "t", Namespace: "ns-1", Params: map[string]string{"replicas": "3"}}
+	hints, err := RenderHints(s, inst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"kubectl get pod -n ns-1", "scale to 3"}
+	if !reflect.DeepEqual(hints, want) {
+		t.Errorf("rendered hints = %v, want %v", hints, want)
+	}
+}

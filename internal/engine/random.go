@@ -67,7 +67,8 @@ func CheckDraw(s scenario.Scenario, seed int64) error {
 	if v, ok := findVariant(s, variant); ok {
 		prompt = v.Prompt
 	}
-	templates := append([]string{prompt}, s.Setup.Manifests...)
+	templates := append([]string{prompt}, s.Hints...)
+	templates = append(templates, s.Setup.Manifests...)
 	templates = append(templates, s.Setup.Commands...)
 	templates = append(templates, s.Solution.Manifests...)
 	templates = append(templates, s.Solution.Commands...)
@@ -75,6 +76,7 @@ func CheckDraw(s scenario.Scenario, seed int64) error {
 	for _, ref := range s.Cleanup.ClusterScoped {
 		templates = append(templates, ref.Name)
 	}
+	templates = append(templates, s.Cleanup.Commands...)
 	for _, t := range templates {
 		if _, err := render(t, data); err != nil {
 			return err

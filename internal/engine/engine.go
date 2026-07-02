@@ -57,7 +57,10 @@ type Instance struct {
 	Namespace     string            `json:"namespace"`
 	Params        map[string]string `json:"params"`
 	ClusterScoped []ObjRef          `json:"cluster_scoped"`
-	StartedAt     time.Time         `json:"started_at"`
+	// CleanupCommands are the scenario's cleanup.commands rendered at Start
+	// (Cleanup has no scenario in hand, so they must be resolved up front).
+	CleanupCommands []string  `json:"cleanup_commands,omitempty"`
+	StartedAt       time.Time `json:"started_at"`
 
 	// Result of the most recent `check`, persisted so `status` can show progress.
 	// CheckedAt is zero until the scenario has been checked at least once.
@@ -108,6 +111,13 @@ func Start(cfg *config.Config, s scenario.Scenario, seed int64) (*Instance, erro
 			return nil, fmt.Errorf("rendering cleanup name: %w", err)
 		}
 		inst.ClusterScoped = append(inst.ClusterScoped, ObjRef{Kind: ref.Kind, Name: name})
+	}
+	for _, c := range s.Cleanup.Commands {
+		rendered, err := render(c, data)
+		if err != nil {
+			return nil, fmt.Errorf("rendering cleanup command: %w", err)
+		}
+		inst.CleanupCommands = append(inst.CleanupCommands, rendered)
 	}
 
 	labels := map[string]string{
@@ -169,6 +179,17 @@ func Cleanup(cfg *config.Config, inst *Instance) error {
 			return err
 		}
 	}
+	// Cleanup commands were rendered at Start; they must be idempotent because a
+	// failed cleanup keeps the state file, so the whole teardown can be retried.
+	for _, c := range inst.CleanupCommands {
+		args := strings.Fields(c)
+		if len(args) > 0 && args[0] == "kubectl" {
+			args = args[1:]
+		}
+		if _, err := kc.Raw(args...); err != nil {
+			return err
+		}
+	}
 	return os.Remove(statePath(inst.ScenarioID))
 }
 
@@ -180,6 +201,24 @@ func RenderPrompt(s scenario.Scenario, inst *Instance) (string, error) {
 		prompt = v.Prompt
 	}
 	return render(prompt, inst.data())
+}
+
+// RenderHints returns the scenario's hints rendered with the instance's draw
+// (hints may reference params, e.g. "kubectl scale deploy {{.appName}} ...").
+func RenderHints(s scenario.Scenario, inst *Instance) ([]string, error) {
+	if len(s.Hints) == 0 {
+		return nil, nil
+	}
+	data := inst.data()
+	out := make([]string, len(s.Hints))
+	for i, h := range s.Hints {
+		r, err := render(h, data)
+		if err != nil {
+			return nil, err
+		}
+		out[i] = r
+	}
+	return out, nil
 }
 
 // findVariant returns the named variant, or (zero, false) when name is empty or

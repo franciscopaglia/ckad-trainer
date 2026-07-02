@@ -12,6 +12,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -31,6 +32,11 @@ var configPath string
 // version is stamped at build time via -ldflags "-X main.version=vX.Y.Z".
 var version = "dev"
 
+// errSilent signals a non-zero exit for a failure the command already reported
+// in full (e.g. a failed check's FAIL summary), so main doesn't add a redundant
+// "error:" line.
+var errSilent = errors.New("silent failure")
+
 func main() {
 	root := &cobra.Command{
 		Use:           "ckad-trainer",
@@ -48,9 +54,78 @@ func main() {
 	)
 
 	if err := root.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
+		if !errors.Is(err, errSilent) {
+			fmt.Fprintln(os.Stderr, "error:", err)
+		}
 		os.Exit(1)
 	}
+}
+
+// --- shell completion helpers ---
+
+// completeStartedIDs completes ids of scenarios that have live state — what
+// check/solution/solve/cleanup/reset/status act on. Local state only, no
+// cluster or config access, so completion stays instant.
+func completeStartedIDs(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	if len(args) != 0 {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	insts, err := engine.LoadActiveInstances()
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	out := make([]string, 0, len(insts))
+	for _, in := range insts {
+		out = append(out, in.ScenarioID)
+	}
+	return out, cobra.ShellCompDirectiveNoFileComp
+}
+
+// completeStartableIDs completes catalog ids `start` accepts: practice/exam
+// scenarios that are not already running.
+func completeStartableIDs(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	if len(args) != 0 {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	_, scenarios, err := resolveCatalog()
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	var out []string
+	for _, s := range scenarios {
+		if s.Mode == scenario.ModeFlashcard || engine.HasState(s.ID) {
+			continue
+		}
+		out = append(out, s.ID+"\t"+s.Title)
+	}
+	return out, cobra.ShellCompDirectiveNoFileComp
+}
+
+// domainSlugs returns the allowed --domain values, sorted.
+func domainSlugs() []string {
+	out := make([]string, 0, len(scenario.Domains))
+	for d := range scenario.Domains {
+		out = append(out, d)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// addDomainFlag wires a --domain flag with slug completion.
+func addDomainFlag(cmd *cobra.Command, domain *string, usage string) {
+	cmd.Flags().StringVar(domain, "domain", "", usage)
+	_ = cmd.RegisterFlagCompletionFunc("domain",
+		func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+			return domainSlugs(), cobra.ShellCompDirectiveNoFileComp
+		})
+}
+
+// checkDomain validates a --domain value against the known slugs.
+func checkDomain(domain string) error {
+	if domain == "" || scenario.Domains[domain] {
+		return nil
+	}
+	return fmt.Errorf("unknown domain %q — one of: %s", domain, strings.Join(domainSlugs(), ", "))
 }
 
 // loadScenarios reads the catalog: from disk when cfg.ScenarioDir is set
@@ -173,7 +248,8 @@ func doctorCmd() *cobra.Command {
 				fmt.Println(green("doctor: ready"))
 				return nil
 			}
-			return fmt.Errorf("doctor: not ready (see failures above)")
+			fmt.Println(red("doctor: not ready — fix the failures above and re-run"))
+			return errSilent
 		},
 	}
 }
@@ -182,9 +258,10 @@ func startCmd() *cobra.Command {
 	var force bool
 	var seed int64
 	cmd := &cobra.Command{
-		Use:   "start <scenario-id>",
-		Short: "Set up a scenario and print the task",
-		Args:  cobra.ExactArgs(1),
+		Use:               "start <scenario-id>",
+		Short:             "Set up a scenario and print the task",
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: completeStartableIDs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id := args[0]
 			cfg, s, err := resolveScenario(id)
@@ -203,6 +280,9 @@ func startCmd() *cobra.Command {
 // startAndPrint sets up a scenario and prints the task. Shared by `start` and
 // `random`.
 func startAndPrint(cfg *config.Config, s scenario.Scenario, seed int64, force bool) error {
+	if s.Mode == scenario.ModeFlashcard {
+		return fmt.Errorf("%q is a flashcard, not a cluster scenario — practice it with `ckad-trainer drill`", s.ID)
+	}
 	if engine.HasState(s.ID) {
 		if !force {
 			return fmt.Errorf("%q is already started — re-check it, `cleanup %s`, or `start --force`", s.ID, s.ID)
@@ -223,12 +303,18 @@ func startAndPrint(cfg *config.Config, s scenario.Scenario, seed int64, force bo
 	if err != nil {
 		return err
 	}
+	hints, err := engine.RenderHints(s, inst)
+	if err != nil {
+		return err
+	}
 	fmt.Printf("%s  [%s · %s]\n", bold(s.Title), s.Mode, s.Domain)
-	fmt.Printf("namespace: %s  %s\n\n", inst.Namespace, dim(fmt.Sprintf("(seed %d)", inst.Seed)))
+	fmt.Printf("namespace: %s  %s\n", inst.Namespace, dim(fmt.Sprintf("(seed %d)", inst.Seed)))
+	fmt.Println(dim(fmt.Sprintf("work there by default:  kubectl config set-context --current --namespace=%s", inst.Namespace)))
+	fmt.Println()
 	fmt.Println(prompt)
-	if len(s.Hints) > 0 {
+	if len(hints) > 0 {
 		fmt.Println("hints:")
-		for _, h := range s.Hints {
+		for _, h := range hints {
 			fmt.Printf("  - %s\n", h)
 		}
 	}
@@ -244,6 +330,9 @@ func randomCmd() *cobra.Command {
 		Use:   "random",
 		Short: "Start a random scenario (optionally from one domain)",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := checkDomain(domain); err != nil {
+				return err
+			}
 			cfg, scenarios, err := resolveCatalog()
 			if err != nil {
 				return err
@@ -259,22 +348,23 @@ func randomCmd() *cobra.Command {
 				pool = append(pool, s)
 			}
 			if len(pool) == 0 {
-				return fmt.Errorf("no available scenarios to pick from")
+				return fmt.Errorf("no available scenarios to pick from — everything matching is already active (`status` lists them)")
 			}
 			s := pool[rand.Intn(len(pool))]
 			return startAndPrint(cfg, s, seed, false)
 		},
 	}
-	cmd.Flags().StringVar(&domain, "domain", "", "limit to a domain slug")
+	addDomainFlag(cmd, &domain, "limit to a domain slug")
 	cmd.Flags().Int64Var(&seed, "seed", 0, "fix the scenario's draw (0 = random)")
 	return cmd
 }
 
 func checkCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "check <scenario-id>",
-		Short: "Verify your work; prints a per-assertion PASS/FAIL table",
-		Args:  cobra.ExactArgs(1),
+		Use:               "check <scenario-id>",
+		Short:             "Verify your work; prints a per-assertion PASS/FAIL table",
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: completeStartedIDs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id := args[0]
 			cfg, s, inst, err := resolveStarted(id)
@@ -296,7 +386,7 @@ func checkCmd() *cobra.Command {
 				return nil
 			}
 			fmt.Printf("\n%s — keep going, then `check %s` again (or `solution %s`)\n", red("FAIL"), id, id)
-			return fmt.Errorf("scenario not yet passing")
+			return errSilent // the FAIL line above is the report; exit 1 without an extra error line
 		},
 	}
 }
@@ -349,9 +439,10 @@ func printReport(report engine.CheckReport) {
 
 func solutionCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "solution <scenario-id>",
-		Short: "Show the reference answer for the current attempt",
-		Args:  cobra.ExactArgs(1),
+		Use:               "solution <scenario-id>",
+		Short:             "Show the reference answer for the current attempt",
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: completeStartedIDs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id := args[0]
 			_, s, inst, err := resolveStarted(id)
@@ -370,9 +461,10 @@ func solutionCmd() *cobra.Command {
 
 func solveCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "solve <scenario-id>",
-		Short: "Apply the reference solution (to inspect a working answer)",
-		Args:  cobra.ExactArgs(1),
+		Use:               "solve <scenario-id>",
+		Short:             "Apply the reference solution (to inspect a working answer)",
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: completeStartedIDs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id := args[0]
 			cfg, s, inst, err := resolveStarted(id)
@@ -390,9 +482,10 @@ func solveCmd() *cobra.Command {
 
 func statusCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "status [scenario-id]",
-		Short: "List active scenarios, or re-show the task for one",
-		Args:  cobra.MaximumNArgs(1),
+		Use:               "status [scenario-id]",
+		Short:             "List active scenarios, or re-show the task for one",
+		Args:              cobra.MaximumNArgs(1),
+		ValidArgsFunction: completeStartedIDs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 1 {
 				return showStatus(args[0])
@@ -521,6 +614,10 @@ func showStatus(id string) error {
 	if err != nil {
 		return err
 	}
+	hints, err := engine.RenderHints(s, inst)
+	if err != nil {
+		return err
+	}
 	done := ""
 	if !inst.CheckedAt.IsZero() {
 		if inst.Passed {
@@ -530,12 +627,14 @@ func showStatus(id string) error {
 		}
 	}
 	fmt.Printf("%s  [%s · %s]\n", bold(s.Title), s.Mode, s.Domain)
-	fmt.Printf("namespace: %s  %s  started %s ago%s\n\n",
+	fmt.Printf("namespace: %s  %s  started %s ago%s\n",
 		inst.Namespace, dim(fmt.Sprintf("(seed %d)", inst.Seed)), ageOf(inst.StartedAt), done)
+	fmt.Println(dim(fmt.Sprintf("work there by default:  kubectl config set-context --current --namespace=%s", inst.Namespace)))
+	fmt.Println()
 	fmt.Println(prompt)
-	if len(s.Hints) > 0 {
+	if len(hints) > 0 {
 		fmt.Println("hints:")
-		for _, h := range s.Hints {
+		for _, h := range hints {
 			fmt.Printf("  - %s\n", h)
 		}
 	}
@@ -558,17 +657,20 @@ func ageOf(t time.Time) string {
 		return fmt.Sprintf("%ds", int(d.Seconds()))
 	case d < time.Hour:
 		return fmt.Sprintf("%dm", int(d.Minutes()))
-	default:
+	case d < 48*time.Hour:
 		return fmt.Sprintf("%dh%dm", int(d.Hours()), int(d.Minutes())%60)
+	default:
+		return fmt.Sprintf("%dd", int(d.Hours())/24)
 	}
 }
 
 func cleanupCmd() *cobra.Command {
 	var all, stale bool
 	cmd := &cobra.Command{
-		Use:   "cleanup [scenario-id]",
-		Short: "Delete a scenario's namespace and tracked objects (--all, or --stale to prune orphans)",
-		Args:  cobra.MaximumNArgs(1),
+		Use:               "cleanup [scenario-id]",
+		Short:             "Delete a scenario's namespace and tracked objects (--all, or --stale to prune orphans)",
+		Args:              cobra.MaximumNArgs(1),
+		ValidArgsFunction: completeStartedIDs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := loadConfig()
 			if err != nil {
@@ -665,32 +767,97 @@ func cleanupAll(cfg *config.Config) error {
 }
 
 func listCmd() *cobra.Command {
-	return &cobra.Command{
+	var domain string
+	cmd := &cobra.Command{
 		Use:   "list",
-		Short: "List available scenarios",
+		Short: "List the scenario catalog, grouped by domain (🎲 = randomized)",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := checkDomain(domain); err != nil {
+				return err
+			}
 			_, scenarios, err := resolveCatalog()
 			if err != nil {
 				return err
 			}
-			if len(scenarios) == 0 {
+
+			byDomain := map[string][]scenario.Scenario{}
+			var flashcards []scenario.Scenario
+			for _, s := range scenarios {
+				if domain != "" && s.Domain != domain {
+					continue
+				}
+				if s.Mode == scenario.ModeFlashcard {
+					flashcards = append(flashcards, s)
+					continue
+				}
+				byDomain[s.Domain] = append(byDomain[s.Domain], s)
+			}
+			if len(byDomain) == 0 && len(flashcards) == 0 {
 				fmt.Println("no scenarios found")
 				return nil
 			}
-			for _, s := range scenarios {
-				marker := "  "
-				if s.Randomize {
-					marker = "🎲" // randomized: values/variants differ each run
-				}
-				state := ""
-				if engine.HasState(s.ID) {
-					state = "  (active)"
-				}
-				fmt.Printf("%s %-26s %-10s %-20s %s%s\n", marker, s.ID, s.Mode, s.Domain, s.Title, state)
+
+			// Instance state is local-only, so annotating every row is free.
+			insts, _ := engine.LoadActiveInstances()
+			state := make(map[string]*engine.Instance, len(insts))
+			for _, in := range insts {
+				state[in.ScenarioID] = in
 			}
+
+			slugs := make([]string, 0, len(byDomain))
+			for d := range byDomain {
+				slugs = append(slugs, d)
+			}
+			sort.Strings(slugs)
+			practice := 0
+			for _, slug := range slugs {
+				group := byDomain[slug]
+				sort.Slice(group, func(i, j int) bool { return group[i].ID < group[j].ID })
+				fmt.Println(bold(fmt.Sprintf("%s (%d)", slug, len(group))))
+				for _, s := range group {
+					printListRow(s, state[s.ID])
+				}
+				fmt.Println()
+				practice += len(group)
+			}
+			if len(flashcards) > 0 {
+				sort.Slice(flashcards, func(i, j int) bool { return flashcards[i].ID < flashcards[j].ID })
+				fmt.Printf("%s  %s\n", bold(fmt.Sprintf("flashcards (%d)", len(flashcards))), dim("practice with `ckad-trainer drill`"))
+				for _, s := range flashcards {
+					printListRow(s, nil)
+				}
+				fmt.Println()
+			}
+			fmt.Printf("%d practice + %d flashcards · 🎲 = randomized · next: ckad-trainer start <id>\n",
+				practice, len(flashcards))
 			return nil
 		},
 	}
+	addDomainFlag(cmd, &domain, "only list one domain slug")
+	return cmd
+}
+
+// printListRow prints one catalog line with the run state of its instance, if any.
+func printListRow(s scenario.Scenario, in *engine.Instance) {
+	marker := "  "
+	if s.Randomize {
+		marker = "🎲" // randomized: values/variants differ each run
+	}
+	state := ""
+	switch {
+	case in == nil:
+	case in.CheckedAt.IsZero():
+		state = yellow("● active")
+	case in.Passed:
+		state = green("✓ passed")
+	default:
+		state = red("✗ failed")
+	}
+	if state != "" {
+		fmt.Printf("  %s %-26s %-52s %s\n", marker, s.ID, s.Title, state)
+		return
+	}
+	fmt.Printf("  %s %-26s %s\n", marker, s.ID, s.Title)
 }
 
 func examCmd() *cobra.Command {
@@ -840,9 +1007,10 @@ func fmtRemaining(d time.Duration) string {
 
 func resetCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "reset <scenario-id>",
-		Short: "Clean up and restart a scenario with a fresh draw",
-		Args:  cobra.ExactArgs(1),
+		Use:               "reset <scenario-id>",
+		Short:             "Clean up and restart a scenario with a fresh draw",
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: completeStartedIDs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, s, err := resolveScenario(args[0])
 			if err != nil {
@@ -854,41 +1022,62 @@ func resetCmd() *cobra.Command {
 }
 
 func drillCmd() *cobra.Command {
-	return &cobra.Command{
+	var count int
+	var domain string
+	cmd := &cobra.Command{
 		Use:   "drill",
 		Short: "Flashcard recall drills for kubectl command formats",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := checkDomain(domain); err != nil {
+				return err
+			}
 			_, scenarios, err := resolveCatalog()
 			if err != nil {
 				return err
 			}
 			var cards []scenario.Scenario
 			for _, s := range scenarios {
-				if s.Mode == scenario.ModeFlashcard {
-					cards = append(cards, s)
+				if s.Mode != scenario.ModeFlashcard {
+					continue
 				}
+				if domain != "" && s.Domain != domain {
+					continue
+				}
+				cards = append(cards, s)
 			}
 			if len(cards) == 0 {
 				fmt.Println("no flashcard drills available")
 				return nil
 			}
 			rand.Shuffle(len(cards), func(i, j int) { cards[i], cards[j] = cards[j], cards[i] })
+			if count > 0 && count < len(cards) {
+				cards = cards[:count]
+			}
+			reviewed := 0
 			reader := bufio.NewReader(os.Stdin)
 			for i, s := range cards {
 				fmt.Printf("\n%s [%d/%d]  %s\n", bold("drill"), i+1, len(cards), dim(s.Domain))
 				fmt.Print(strings.TrimRight(s.Prompt, "\n"))
 				fmt.Print("\n> ")
-				_, _ = reader.ReadString('\n') // the attempt is self-graded
+				_, rerr := reader.ReadString('\n') // the attempt is self-graded
+				if rerr != nil {
+					fmt.Println() // stdin closed (Ctrl-D) — end the drill early
+					break
+				}
 				answer := ""
 				if len(s.Solution.Commands) > 0 {
 					answer = s.Solution.Commands[0]
 				}
 				fmt.Printf("%s %s\n", green("answer:"), answer)
+				reviewed++
 			}
-			fmt.Printf("\n%d cards reviewed.\n", len(cards))
+			fmt.Printf("\n%d of %d cards reviewed.\n", reviewed, len(cards))
 			return nil
 		},
 	}
+	cmd.Flags().IntVar(&count, "count", 0, "number of cards to draw (0 = all)")
+	addDomainFlag(cmd, &domain, "limit to a domain slug")
+	return cmd
 }
 
 // --- color output (disabled when piped or NO_COLOR is set) ---
@@ -910,7 +1099,8 @@ func colorize(code, s string) string {
 	return "\x1b[" + code + "m" + s + "\x1b[0m"
 }
 
-func green(s string) string { return colorize("32", s) }
-func red(s string) string   { return colorize("31", s) }
-func bold(s string) string  { return colorize("1", s) }
-func dim(s string) string   { return colorize("2", s) }
+func green(s string) string  { return colorize("32", s) }
+func red(s string) string    { return colorize("31", s) }
+func yellow(s string) string { return colorize("33", s) }
+func bold(s string) string   { return colorize("1", s) }
+func dim(s string) string    { return colorize("2", s) }

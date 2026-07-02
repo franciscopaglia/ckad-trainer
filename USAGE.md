@@ -65,6 +65,15 @@ doctor: ready
 > refuses to run unless that context is also your current one. It can't touch a
 > real cluster by accident.
 
+Optional but recommended — shell completion (`bash`, `zsh`, `fish`,
+`powershell`). It completes commands, flags, scenario ids (only *started* ones
+for `check`/`cleanup`/`status`/..., only startable ones for `start`), and
+`--domain` slugs:
+
+```bash
+source <(ckad-trainer completion bash)     # or add to ~/.bashrc
+```
+
 ---
 
 ## 2. The two modes
@@ -94,6 +103,7 @@ ckad-trainer start configmap-consume      # creates an isolated namespace + prin
 ```
 Consume a ConfigMap from a Pod  [practice · configuration]
 namespace: ckad-configmap-consume-czmva  (seed 7)
+work there by default:  kubectl config set-context --current --namespace=ckad-configmap-consume-czmva
 
 In `ckad-configmap-consume-czmva`, expose only key `LOG_LEVEL` of ConfigMap
 `app-config` as the environment variable `LOG_LEVEL` in a new Pod `consumer-163`
@@ -159,7 +169,7 @@ refer to the same task. To replay a specific draw (handy for comparing notes or
 re-attempting the exact task):
 
 ```bash
-ckad-trainer start pv-pvc-pod-static --seed 42
+ckad-trainer start configmap-consume --seed 42
 ```
 
 The same seed always produces the same variant and values.
@@ -214,10 +224,13 @@ ckad-trainer cleanup --stale              # prune state whose namespace is alrea
 `drill` is a quick recall trainer for the fiddly `kubectl` command formats
 (jsonpath, `--sort-by`, `custom-columns`, field selectors, `wait --for`, ...).
 It shuffles the flashcards, shows each prompt, waits for you to type your answer,
-then reveals the canonical command. No cluster needed.
+then reveals the canonical command. No cluster needed. Ctrl-D ends the drill
+early.
 
 ```bash
-ckad-trainer drill
+ckad-trainer drill                            # all cards, shuffled
+ckad-trainer drill --count 5                  # a quick 5-card session
+ckad-trainer drill --domain observability     # one domain only
 ```
 
 ```
@@ -279,16 +292,17 @@ ckad-trainer exam abort
 |---------|--------------|
 | `init [--context <name>] [--force]` | Write `config.yaml` pinned to a kube context (default: current) |
 | `doctor` | Check kubectl, the safety context guard, and reachability |
-| `list` | List the scenario catalog (🎲 = randomized) |
+| `list [--domain <slug>]` | List the catalog grouped by domain, with each scenario's run state (🎲 = randomized) |
 | `start <id> [--seed N] [--force]` | Set up a scenario and print the task |
 | `status [<id>]` | List active scenarios with a STATUS column (passed/in progress/stale), or re-show one task |
-| `check <id>` | Verify your work; per-assertion PASS/FAIL table (records the result) |
+| `check <id>` | Verify your work; per-assertion PASS/FAIL table (records the result; exits non-zero until passing) |
 | `solution <id>` | Show the reference answer (YAML/commands + explanation) |
 | `solve <id>` | Apply the reference answer to the cluster (to inspect it) |
 | `cleanup <id>` / `--all` / `--stale` | Tear down one / every active scenario / prune state for gone namespaces |
 | `reset <id>` | Clean up and restart with a fresh draw |
 | `random [--domain <slug>] [--seed N]` | Start a random scenario |
-| `drill` | Flashcard recall drills for kubectl command formats |
+| `drill [--count N] [--domain <slug>]` | Flashcard recall drills for kubectl command formats |
+| `completion <shell>` | Shell completion (commands, scenario ids, domain slugs) |
 | `exam start [--count N] [--minutes M] [--seed N]` | Begin a timed exam |
 | `exam status` | Time left + tasks passing |
 | `exam grade` | Score, per-domain breakdown, and clean up |
@@ -303,7 +317,9 @@ automatically when piped or when `NO_COLOR` is set.
 
 ## 9. Configuration
 
-A single `config.yaml` (copy `config.example.yaml`):
+A single `config.yaml`. `ckad-trainer init` writes one pinned to your current
+kube context (with `provider: kubeconfig`); the full reference — see also
+`config.example.yaml`:
 
 ```yaml
 cluster:
@@ -347,8 +363,8 @@ mapped to the 2026 CKAD domains:
 | **Observability & Maintenance** (15%) | liveness/readiness/startup probes, fix-a-broken-probe, ephemeral debug containers |
 | **Flashcards** | context switch + default namespace (`config use-context`/`set-context`), jsonpath, `--sort-by`, custom-columns, field selectors, `wait --for`, set-based selectors, TLS secret, create token, `auth can-i`, rollout restart, debug syntax, logs (`--previous`), `top`, events `--sort-by`, api-versions/deprecations, image build, Helm (install/upgrade/pull), Kustomize, CRD discovery |
 
-`ckad-trainer list` shows them all; `ckad-trainer random --domain <slug>` filters
-by the fine-grained slugs (`configuration`, `core-concepts`, `multi-container`,
+`ckad-trainer list` shows them all, grouped by domain; `list --domain <slug>`
+and `ckad-trainer random --domain <slug>` filter by the fine-grained slugs (`configuration`, `core-concepts`, `multi-container`,
 `observability`, `pod-design`, `security`, `services-networking`,
 `state-persistence`).
 

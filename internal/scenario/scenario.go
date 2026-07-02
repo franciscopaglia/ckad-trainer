@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io/fs"
 	"regexp"
+	"sort"
 	"strings"
 	"text/template"
 
@@ -134,9 +135,13 @@ type ObjRef struct {
 	Name string `yaml:"name"`
 }
 
-// Cleanup lists extra cluster-scoped objects to delete (namespace is automatic).
+// Cleanup lists extra teardown work beyond the automatic namespace delete:
+// cluster-scoped objects to remove, and kubectl commands to run (for state the
+// object model can't express, e.g. removing a node label a setup command added).
+// Commands are rendered at Start and must be idempotent — cleanup can be retried.
 type Cleanup struct {
 	ClusterScoped []ObjRef `yaml:"cluster_scoped,omitempty"`
+	Commands      []string `yaml:"commands,omitempty"`
 }
 
 // Scenario is one task definition.
@@ -200,14 +205,78 @@ func LoadAll(fsys fs.FS) ([]Scenario, error) {
 	return scenarios, nil
 }
 
-// Find returns the scenario with the given id, or an error.
+// Find returns the scenario with the given id, or an error. On a miss it
+// suggests the closest catalog ids (typos, partial ids).
 func Find(scenarios []Scenario, id string) (Scenario, error) {
 	for _, s := range scenarios {
 		if s.ID == id {
 			return s, nil
 		}
 	}
-	return Scenario{}, fmt.Errorf("no scenario with id %q", id)
+	if sug := Suggest(scenarios, id); len(sug) > 0 {
+		return Scenario{}, fmt.Errorf("no scenario with id %q — did you mean %s? (`list` shows all)",
+			id, strings.Join(sug, " or "))
+	}
+	return Scenario{}, fmt.Errorf("no scenario with id %q (`list` shows all)", id)
+}
+
+// Suggest returns up to three catalog ids close to id: ids containing it as a
+// substring, plus near-misses by edit distance.
+func Suggest(scenarios []Scenario, id string) []string {
+	maxDist := len(id) / 3
+	if maxDist < 2 {
+		maxDist = 2
+	}
+	type cand struct {
+		id   string
+		dist int
+	}
+	var cands []cand
+	for _, s := range scenarios {
+		d := editDistance(id, s.ID)
+		if d > maxDist {
+			if !strings.Contains(s.ID, id) {
+				continue
+			}
+			d = maxDist // substring hit: keep, ranked behind closer edits
+		}
+		cands = append(cands, cand{s.ID, d})
+	}
+	sort.Slice(cands, func(i, j int) bool {
+		if cands[i].dist != cands[j].dist {
+			return cands[i].dist < cands[j].dist
+		}
+		return cands[i].id < cands[j].id
+	})
+	if len(cands) > 3 {
+		cands = cands[:3]
+	}
+	out := make([]string, len(cands))
+	for i, c := range cands {
+		out[i] = c.id
+	}
+	return out
+}
+
+// editDistance is the Levenshtein distance between a and b.
+func editDistance(a, b string) int {
+	prev := make([]int, len(b)+1)
+	cur := make([]int, len(b)+1)
+	for j := range prev {
+		prev[j] = j
+	}
+	for i := 1; i <= len(a); i++ {
+		cur[0] = i
+		for j := 1; j <= len(b); j++ {
+			cost := 1
+			if a[i-1] == b[j-1] {
+				cost = 0
+			}
+			cur[j] = min(prev[j]+1, cur[j-1]+1, prev[j-1]+cost)
+		}
+		prev, cur = cur, prev
+	}
+	return prev[len(b)]
 }
 
 // normalize fills convenience defaults before validation.
@@ -328,6 +397,7 @@ func (s Scenario) templatedStrings() []string {
 	var out []string
 	add := func(ss ...string) { out = append(out, ss...) }
 	add(s.Prompt)
+	add(s.Hints...)
 	add(s.Setup.Manifests...)
 	add(s.Setup.Commands...)
 	add(s.Solution.Manifests...)
@@ -339,5 +409,6 @@ func (s Scenario) templatedStrings() []string {
 	for _, ref := range s.Cleanup.ClusterScoped {
 		add(ref.Name)
 	}
+	add(s.Cleanup.Commands...)
 	return out
 }
