@@ -58,26 +58,14 @@ When adding any of these, also bump the scenario counts in README.md (intro)
 and USAGE.md (§10 intro + the domain table's "Covered" cell) in the same
 change, and prove it with the subset smoke run above.
 
-1. **`taint-toleration`** (core-concepts, randomize) — the existing
-   `tolerations` scenario never proves the toleration *works*; this one taints
-   the nodes for real. Setup: `kubectl taint nodes --all
-   {{.key}}={{.value}}:NoSchedule --overwrite`. Task: pod with a matching
-   toleration; assert toleration fields AND `status.phase == Running`
-   (wait 60s). Cleanup: `cleanup.commands` untaint. **Gotchas:** (a) verify
-   `kubectl taint nodes --all <key>-` exits 0 when the taint is absent —
-   cleanup must be idempotent; if it exits non-zero, the engine needs a
-   tolerate-absence strategy first. (b) While active, other new Pods without
-   the toleration won't schedule (single-node clusters especially) — put a
-   comment in the YAML saying runs should not overlap with other scenarios'
-   Running-asserts. Use NoSchedule (not NoExecute) so existing Pods survive.
-2. **`pod-affinity`** (core-concepts, randomize, two variants) — setup
+1. **`pod-affinity`** (core-concepts, randomize, two variants) — setup
    creates a labeled anchor Pod (e.g. `app=cache`). Variant `co-locate`:
    required podAffinity on that label, `topologyKey: kubernetes.io/hostname`,
    assert affinity fields + Running (wait). Variant `spread`: podAntiAffinity
    — MUST be `preferredDuringSchedulingIgnoredDuringExecution` (required
    anti-affinity can never schedule on a single-node cluster); assert the
    preferred term's fields + Running.
-3. **`crd-instance`** (configuration) — setup applies a tiny Namespaced-scope
+2. **`crd-instance`** (configuration) — setup applies a tiny Namespaced-scope
    CRD and waits `--for condition=Established`; task: discover it
    (`api-resources`/`explain`) and create a custom resource in the scenario
    namespace; verify fetches the CR by `<plural>.<group>` and asserts a spec

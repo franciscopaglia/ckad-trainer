@@ -1,0 +1,75 @@
+# Unlike `tolerations` (spec-only), this taints the nodes for real, so Running
+# proves the toleration works. NoSchedule only (NoExecute would evict other
+# Pods); while this scenario is active, new Pods without the toleration won't
+# schedule — avoid overlapping it with other scenarios' Running-asserts.
+id: taint-toleration
+title: "Tolerate a real node taint"
+mode: practice
+domain: core-concepts
+weight: 1
+estimated_minutes: 4
+randomize: true
+references:
+  - https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/
+
+params:
+  podName: { pattern: "tolerant-{{randInt 100 999}}" }
+  key: { pick: [dedicated, exam-node, restricted] }
+  value: { pick: ["true", "batch", "team-a"] }
+
+setup:
+  commands:
+    - "kubectl taint nodes --all {{.key}}={{.value}}:NoSchedule --overwrite"
+
+prompt: |
+  Every node in the cluster has just been tainted
+  `{{.key}}={{.value}}:NoSchedule`. In `{{.ns}}`, create a Pod `{{.podName}}`
+  (image `busybox:1.36`, command `sleep 3600`) with a toleration (operator
+  `Equal`) that lets it schedule anyway, and confirm it reaches **Running**.
+
+hints:
+  - "kubectl describe nodes | grep -A2 Taints shows what you must tolerate."
+  - "The toleration's key, value and effect must all match the taint."
+
+verify:
+  - kind: Pod
+    name: "{{.podName}}"
+    assert:
+      - path: '{.spec.tolerations[?(@.key=="{{.key}}")].value}'
+        equals: "{{.value}}"
+      - path: '{.spec.tolerations[?(@.key=="{{.key}}")].effect}'
+        equals: "NoSchedule"
+      - path: "{.status.phase}"
+        equals: "Running"
+        wait: "60s"
+
+solution:
+  description: |
+    The taint repels every Pod that doesn't tolerate it; with all nodes
+    tainted, only a Pod carrying a matching toleration can schedule at all —
+    Running is the proof the toleration is right.
+  manifests:
+    - |
+      apiVersion: v1
+      kind: Pod
+      metadata:
+        name: {{.podName}}
+        namespace: {{.ns}}
+      spec:
+        restartPolicy: Never
+        tolerations:
+          - key: "{{.key}}"
+            operator: "Equal"
+            value: "{{.value}}"
+            effect: "NoSchedule"
+        containers:
+          - name: app
+            image: busybox:1.36
+            command: ["sleep", "3600"]
+
+# Removing an absent taint exits non-zero, so make the sequence idempotent:
+# re-apply with --overwrite (always succeeds), then remove (always present).
+cleanup:
+  commands:
+    - "kubectl taint nodes --all {{.key}}={{.value}}:NoSchedule --overwrite"
+    - "kubectl taint nodes --all {{.key}}-"
