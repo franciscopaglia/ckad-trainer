@@ -10,7 +10,8 @@ Scenarios are YAML **data**, not code; the engine is generic.
 
 ## Layout
 
-- `cmd/ckad-trainer/` — cobra CLI.
+- `cmd/ckad-trainer/` — cobra CLI. **CLI conventions (errSilent, completion,
+  hint rendering): `cmd/ckad-trainer/CLAUDE.md`.**
 - `internal/engine/` — scenario lifecycle, verification, randomization. **See
   `internal/engine/CLAUDE.md`.**
 - `internal/scenario/` — YAML schema, loader, validator. `internal/verify/` —
@@ -18,16 +19,20 @@ Scenarios are YAML **data**, not code; the engine is generic.
 - `internal/config/`, `internal/cluster/` (safety guard), `internal/kubectl/`
   (exec wrapper, always injects `--context`), `internal/paths/` (XDG config/state).
 - `scenarios/practice/<domain>/*.yaml`, `scenarios/flashcards/*.yaml` —
-  embedded via `catalog.go`.
+  embedded via `catalog.go`. **Authoring rules (assertion style, cleanup,
+  randomization): `scenarios/CLAUDE.md`.**
 
 ## Commands
 
 - `make check` — fmt + vet + cluster-free tests + license headers (pre-commit gate).
 - `make smoke` — cluster smoke: starts every scenario ×3 seeds, applies its own
   solution, asserts the check passes. Mutates the cluster in `config.yaml`.
+  Smoke a subset: `go test -tags=cluster -run 'TestSmokeSolutions/(<id>|<id>)$' .`
+  (careful: it cleans up any live instance of those ids first).
 - `make build` / `make dist VERSION=vX.Y.Z` — binary / cross-compiled release + checksums.
-- Adding a scenario: drop a YAML file under `scenarios/`; validate with
-  `make test`, prove solvable with `make smoke`. Flashcards are smoke-skipped.
+- Adding a scenario: drop a YAML file under `scenarios/`; **read
+  `scenarios/CLAUDE.md` first**; validate with `make test`, prove solvable with
+  `make smoke`. Flashcards are smoke-skipped.
 
 ## Keep docs current (token optimization)
 

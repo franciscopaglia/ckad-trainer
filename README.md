@@ -69,9 +69,14 @@ make it executable, and put it on your `PATH`:
 
 ```bash
 # Linux (x86_64)
-curl -fsSL -o ckad-trainer https://github.com/franciscopaglia/ckad-trainer/releases/latest/download/ckad-trainer-linux-amd64
-chmod +x ckad-trainer
-sudo mv ckad-trainer /usr/local/bin/      # somewhere on your PATH
+curl -fsSLO https://github.com/franciscopaglia/ckad-trainer/releases/latest/download/ckad-trainer-linux-amd64
+
+# optional: verify the checksum BEFORE renaming (the sums list the asset names)
+curl -fsSLO https://github.com/franciscopaglia/ckad-trainer/releases/latest/download/SHA256SUMS
+sha256sum -c SHA256SUMS --ignore-missing      # expect "ckad-trainer-linux-amd64: OK"
+
+chmod +x ckad-trainer-linux-amd64
+sudo mv ckad-trainer-linux-amd64 /usr/local/bin/ckad-trainer   # somewhere on your PATH
 
 ckad-trainer --version                    # confirm it's installed
 ```
@@ -86,15 +91,9 @@ Pick the asset that matches your machine:
 | macOS Apple Silicon | `ckad-trainer-darwin-arm64` |
 | Windows x86_64 | `ckad-trainer-windows-amd64.exe` |
 
-Each release ships a `SHA256SUMS` file. To verify your download:
-
-```bash
-curl -fsSLO https://github.com/franciscopaglia/ckad-trainer/releases/latest/download/SHA256SUMS
-sha256sum -c SHA256SUMS --ignore-missing      # expect "<asset>: OK"
-```
-
 macOS users: if Gatekeeper blocks the binary, clear the quarantine flag with
-`xattr -d com.apple.quarantine ckad-trainer`. Or [build from source](#build-and-install).
+`xattr -d com.apple.quarantine /usr/local/bin/ckad-trainer` (wherever you
+installed it). Or [build from source](#build-and-install).
 
 **With the Go toolchain** you can skip the download entirely:
 
@@ -106,6 +105,10 @@ This drops `ckad-trainer` in `$(go env GOPATH)/bin`. The catalog is embedded, so
 the binary is self-contained; it stores config and progress under
 `$XDG_CONFIG_HOME` / `$XDG_STATE_HOME` (see [Configuration](#configuration)), so
 it works from any directory.
+
+Optional: enable shell completion (completes commands, scenario ids, and
+`--domain` slugs) with `source <(ckad-trainer completion bash)` — also
+available for `zsh`, `fish`, and `powershell`.
 
 ---
 
@@ -175,7 +178,7 @@ make help               # list all targets
 
 ```bash
 make test     # cluster-free: unit tests + loads & renders the whole catalog across seeds
-make check    # fmt + vet + test  (the pre-commit gate)
+make check    # fmt + vet + test + license-header check  (the pre-commit gate)
 make smoke    # cluster-backed: starts every scenario x3 seeds, applies its own
               # solution, and asserts the check PASSes (mutates the configured cluster)
 ```
@@ -201,6 +204,7 @@ catalog.go               # go:embed of the scenarios/ directory
 scenarios/
   practice/<domain>/*.yaml   # hands-on scenarios (data, not code)
   flashcards/*.yaml          # kubectl command-format recall drills
+scripts/                 # minikube-up.sh, license-headers.sh
 config.example.yaml      Makefile      USAGE.md
 ```
 
@@ -212,8 +216,10 @@ config.example.yaml      Makefile      USAGE.md
 
 Scenarios are plain **YAML data** — add a file under `scenarios/practice/<domain>/`
 and the engine picks it up; no Go changes needed. Each defines `setup`, a
-`prompt`, declarative `verify` assertions, a `solution`, and (for cluster-scoped
-objects) `cleanup`. Randomized scenarios add `params` and/or `variants`.
+`prompt`, declarative `verify` assertions, a `solution`, and `cleanup` for
+anything the namespace delete won't cover (cluster-scoped objects, plus
+idempotent undo commands for things like node labels). Randomized scenarios add
+`params` and/or `variants`.
 
 While authoring, set `scenario_dir: ./scenarios` in `config.yaml` to load from
 disk instead of the embedded copy, then validate with `make test` and prove it
@@ -247,16 +253,18 @@ the installed binary tracks your progress the same from any directory.
 The `safety.require_context` guard refuses to run unless your current kube
 context matches it, so the app never touches a real cluster by accident.
 
+What `init` writes (with `<context>` set to your current kube context):
+
 ```yaml
 cluster:
-  provider: kubeconfig   # minikube | kubeconfig
-  context: minikube      # the context to operate on
+  provider: kubeconfig   # minikube | kubeconfig (minikube adds auto-start)
+  context: <context>     # the context to operate on
   kubectl: kubectl
 namespace_prefix: ckad
 defaults:
   exam: { count: 16, minutes: 120 }
 safety:
-  require_context: minikube
+  require_context: <context>
 ```
 
 Full field-by-field reference in the [Usage guide](./USAGE.md#9-configuration).
