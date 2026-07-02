@@ -11,7 +11,7 @@ per-assertion **PASS/FAIL** table, and cleans up after itself.
 
 Built to grind the muscle memory the exam actually tests — imperative commands,
 specific API fields, and "modify this existing object" tasks under time pressure.
-**71 scenarios** (48 hands-on, most randomized, + 23 kubectl/helm flashcards) across
+**72 scenarios** (49 hands-on, most randomized, + 23 kubectl/helm flashcards) across
 all CKAD domains, in both a practice mode and a timed, scored exam mode.
 
 ## Table of contents
